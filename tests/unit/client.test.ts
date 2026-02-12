@@ -12,6 +12,18 @@ import { describe, test, expect, mock, afterEach } from 'bun:test';
 import { PayArk } from '../../src/client';
 import { PayArkError } from '../../src/errors';
 
+/**
+ * Safely assign a mock to `globalThis.fetch` without Bun's `preconnect` type error.
+ */
+function setFetch(fn: (...args: any[]) => any): void {
+    (globalThis as any).fetch = fn;
+}
+
+/** Read recorded mock calls from the mock fetch. */
+function fetchMock(): { mock: { calls: any[][] } } {
+    return globalThis.fetch as any;
+}
+
 describe('PayArk Client', () => {
     const originalFetch = globalThis.fetch;
 
@@ -90,13 +102,15 @@ describe('PayArk Client', () => {
         }
 
         test('should POST to /v1/checkout with correct body', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({
-                        id: 'pay_abc',
-                        checkout_url: 'https://payark.com/checkout/pay_abc',
-                        payment_method: { type: 'esewa' },
-                    }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({
+                            id: 'pay_abc',
+                            checkout_url: 'https://payark.com/checkout/pay_abc',
+                            payment_method: { type: 'esewa' },
+                        }),
+                    ),
                 ),
             );
 
@@ -111,15 +125,17 @@ describe('PayArk Client', () => {
             expect(session.checkout_url).toBe('https://payark.com/checkout/pay_abc');
             expect(session.payment_method.type).toBe('esewa');
 
-            const [url, opts] = (globalThis.fetch as any).mock.calls[0];
+            const [url, opts] = fetchMock().mock.calls[0];
             expect(url.toString()).toContain('/v1/checkout');
             expect(opts.method).toBe('POST');
         });
 
         test('should default currency to NPR', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'esewa' } }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'esewa' } }),
+                    ),
                 ),
             );
 
@@ -130,14 +146,16 @@ describe('PayArk Client', () => {
                 returnUrl: 'https://example.com',
             });
 
-            const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+            const body = JSON.parse(fetchMock().mock.calls[0][1].body);
             expect(body.currency).toBe('NPR');
         });
 
         test('should allow custom currency override', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'khalti' } }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'khalti' } }),
+                    ),
                 ),
             );
 
@@ -149,14 +167,16 @@ describe('PayArk Client', () => {
                 returnUrl: 'https://example.com',
             });
 
-            const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+            const body = JSON.parse(fetchMock().mock.calls[0][1].body);
             expect(body.currency).toBe('USD');
         });
 
         test('should pass metadata to the API', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'esewa' } }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'esewa' } }),
+                    ),
                 ),
             );
 
@@ -168,15 +188,17 @@ describe('PayArk Client', () => {
                 metadata: { order_id: 'ORD-42', user_email: 'user@test.com' },
             });
 
-            const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+            const body = JSON.parse(fetchMock().mock.calls[0][1].body);
             expect(body.metadata.order_id).toBe('ORD-42');
             expect(body.metadata.user_email).toBe('user@test.com');
         });
 
         test('should pass cancelUrl when provided', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'khalti' } }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'khalti' } }),
+                    ),
                 ),
             );
 
@@ -188,14 +210,16 @@ describe('PayArk Client', () => {
                 cancelUrl: 'https://example.com/cancel',
             });
 
-            const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+            const body = JSON.parse(fetchMock().mock.calls[0][1].body);
             expect(body.cancelUrl).toBe('https://example.com/cancel');
         });
 
         test('should NOT include cancelUrl when not provided', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'esewa' } }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ id: 'p', checkout_url: 'u', payment_method: { type: 'esewa' } }),
+                    ),
                 ),
             );
 
@@ -206,14 +230,16 @@ describe('PayArk Client', () => {
                 returnUrl: 'https://example.com',
             });
 
-            const body = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+            const body = JSON.parse(fetchMock().mock.calls[0][1].body);
             expect(body.cancelUrl).toBeUndefined();
         });
 
         test('should propagate PayArkError from API failure', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    new Response(JSON.stringify({ error: 'Invalid amount' }), { status: 400 }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        new Response(JSON.stringify({ error: 'Invalid amount' }), { status: 400 }),
+                    ),
                 ),
             );
 
@@ -244,12 +270,14 @@ describe('PayArk Client', () => {
         }
 
         test('should GET /v1/payments', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({
-                        data: [{ id: 'pay_1', amount: 500, status: 'success' }],
-                        meta: { total: 1, limit: 10, offset: 0 },
-                    }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({
+                            data: [{ id: 'pay_1', amount: 500, status: 'success' }],
+                            meta: { total: 1, limit: 10, offset: 0 },
+                        }),
+                    ),
                 ),
             );
 
@@ -262,24 +290,28 @@ describe('PayArk Client', () => {
         });
 
         test('should pass limit and offset as query params', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ data: [], meta: { total: 0, limit: 5, offset: 20 } }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ data: [], meta: { total: 0, limit: 5, offset: 20 } }),
+                    ),
                 ),
             );
 
             const client = new PayArk({ apiKey: 'sk_test', baseUrl: 'https://mock.test', maxRetries: 0 });
             await client.payments.list({ limit: 5, offset: 20 });
 
-            const url = new URL((globalThis.fetch as any).mock.calls[0][0]);
+            const url = new URL(fetchMock().mock.calls[0][0]);
             expect(url.searchParams.get('limit')).toBe('5');
             expect(url.searchParams.get('offset')).toBe('20');
         });
 
         test('should work with no arguments (empty params)', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ data: [], meta: { total: 0, limit: 10, offset: 0 } }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ data: [], meta: { total: 0, limit: 10, offset: 0 } }),
+                    ),
                 ),
             );
 
@@ -290,9 +322,11 @@ describe('PayArk Client', () => {
         });
 
         test('should handle empty result set', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ data: [], meta: { total: 0, limit: 10, offset: 0 } }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ data: [], meta: { total: 0, limit: 10, offset: 0 } }),
+                    ),
                 ),
             );
 
@@ -313,9 +347,11 @@ describe('PayArk Client', () => {
                 created_at: '2026-01-01T00:00:00Z',
             }));
 
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ data: payments, meta: { total: 500, limit: 100, offset: 0 } }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ data: payments, meta: { total: 500, limit: 100, offset: 0 } }),
+                    ),
                 ),
             );
 
@@ -336,16 +372,18 @@ describe('PayArk Client', () => {
         }
 
         test('should GET /v1/payments/:id', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({
-                        id: 'pay_xyz',
-                        project_id: 'proj_1',
-                        amount: 1000,
-                        currency: 'NPR',
-                        status: 'pending',
-                        created_at: '2026-01-01T00:00:00Z',
-                    }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({
+                            id: 'pay_xyz',
+                            project_id: 'proj_1',
+                            amount: 1000,
+                            currency: 'NPR',
+                            status: 'pending',
+                            created_at: '2026-01-01T00:00:00Z',
+                        }),
+                    ),
                 ),
             );
 
@@ -357,24 +395,28 @@ describe('PayArk Client', () => {
         });
 
         test('should URL-encode the payment ID', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({ id: 'pay/special', amount: 100, status: 'success', created_at: '' }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({ id: 'pay/special', amount: 100, status: 'success', created_at: '' }),
+                    ),
                 ),
             );
 
             const client = new PayArk({ apiKey: 'sk_test', baseUrl: 'https://mock.test', maxRetries: 0 });
             await client.payments.retrieve('pay/special');
 
-            const url = (globalThis.fetch as any).mock.calls[0][0].toString();
+            const url = fetchMock().mock.calls[0][0].toString();
             expect(url).toContain('pay%2Fspecial');
             expect(url).not.toContain('pay/special');
         });
 
         test('should throw not_found_error on 404', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    new Response(JSON.stringify({ error: 'Payment not found' }), { status: 404 }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        new Response(JSON.stringify({ error: 'Payment not found' }), { status: 404 }),
+                    ),
                 ),
             );
 
@@ -390,20 +432,22 @@ describe('PayArk Client', () => {
         });
 
         test('should return full payment object with optional fields', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({
-                        id: 'pay_full',
-                        project_id: 'proj_1',
-                        amount: 2500,
-                        currency: 'NPR',
-                        status: 'success',
-                        provider_ref: 'esewa_ref_123',
-                        metadata_json: { order_id: 'ORD-99' },
-                        gateway_response: { status: 'COMPLETE' },
-                        created_at: '2026-01-15T10:30:00Z',
-                        updated_at: '2026-01-15T10:35:00Z',
-                    }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({
+                            id: 'pay_full',
+                            project_id: 'proj_1',
+                            amount: 2500,
+                            currency: 'NPR',
+                            status: 'success',
+                            provider_ref: 'esewa_ref_123',
+                            metadata_json: { order_id: 'ORD-99' },
+                            gateway_response: { status: 'COMPLETE' },
+                            created_at: '2026-01-15T10:30:00Z',
+                            updated_at: '2026-01-15T10:35:00Z',
+                        }),
+                    ),
                 ),
             );
 
@@ -417,19 +461,21 @@ describe('PayArk Client', () => {
         });
 
         test('should handle nullable optional fields', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    mockResponse({
-                        id: 'pay_null',
-                        project_id: 'proj_1',
-                        amount: 100,
-                        currency: 'NPR',
-                        status: 'pending',
-                        provider_ref: null,
-                        metadata_json: null,
-                        gateway_response: null,
-                        created_at: '2026-01-01T00:00:00Z',
-                    }),
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        mockResponse({
+                            id: 'pay_null',
+                            project_id: 'proj_1',
+                            amount: 100,
+                            currency: 'NPR',
+                            status: 'pending',
+                            provider_ref: null,
+                            metadata_json: null,
+                            gateway_response: null,
+                            created_at: '2026-01-01T00:00:00Z',
+                        }),
+                    ),
                 ),
             );
 
@@ -448,14 +494,16 @@ describe('PayArk Client', () => {
         test('should use same API key across all resource calls', async () => {
             const apiKeys: string[] = [];
 
-            globalThis.fetch = mock((_, opts: any) => {
-                apiKeys.push(opts.headers.Authorization);
-                return Promise.resolve(
-                    new Response(JSON.stringify({ data: [], meta: { total: 0, limit: 10, offset: 0 } }), {
-                        status: 200,
-                    }),
-                );
-            });
+            setFetch(
+                mock((_: any, opts: any) => {
+                    apiKeys.push(opts.headers.Authorization);
+                    return Promise.resolve(
+                        new Response(JSON.stringify({ data: [], meta: { total: 0, limit: 10, offset: 0 } }), {
+                            status: 200,
+                        }),
+                    );
+                }),
+            );
 
             const client = new PayArk({
                 apiKey: 'sk_live_consistent_key',
@@ -473,14 +521,16 @@ describe('PayArk Client', () => {
         test('independent clients should have independent configs', async () => {
             const urls: string[] = [];
 
-            globalThis.fetch = mock((url: any) => {
-                urls.push(url.toString());
-                return Promise.resolve(
-                    new Response(JSON.stringify({ data: [], meta: { total: 0, limit: 10, offset: 0 } }), {
-                        status: 200,
-                    }),
-                );
-            });
+            setFetch(
+                mock((url: any) => {
+                    urls.push(url.toString());
+                    return Promise.resolve(
+                        new Response(JSON.stringify({ data: [], meta: { total: 0, limit: 10, offset: 0 } }), {
+                            status: 200,
+                        }),
+                    );
+                }),
+            );
 
             const client1 = new PayArk({ apiKey: 'sk_1', baseUrl: 'https://api1.test', maxRetries: 0 });
             const client2 = new PayArk({ apiKey: 'sk_2', baseUrl: 'https://api2.test', maxRetries: 0 });

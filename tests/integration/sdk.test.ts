@@ -12,6 +12,13 @@ import { describe, test, expect, mock, afterEach } from 'bun:test';
 import { PayArk, PayArkError } from '../../src/index';
 import type { CheckoutSession, PaginatedResponse, Payment } from '../../src/types';
 
+/**
+ * Safely assign a mock to `globalThis.fetch` without Bun's `preconnect` type error.
+ */
+function setFetch(fn: (...args: any[]) => any): void {
+    (globalThis as any).fetch = fn;
+}
+
 describe('SDK Integration – End-to-End Workflows', () => {
     const originalFetch = globalThis.fetch;
 
@@ -20,19 +27,23 @@ describe('SDK Integration – End-to-End Workflows', () => {
     });
 
     function setupMockApi(handlers: Record<string, (method: string, body?: any) => Response>) {
-        globalThis.fetch = mock((url: string | URL, opts: RequestInit) => {
-            const urlStr = url.toString();
-            const path = new URL(urlStr).pathname;
-            const handler = handlers[path];
+        setFetch(
+            mock((url: string | URL, opts: RequestInit) => {
+                const urlStr = url.toString();
+                const path = new URL(urlStr).pathname;
+                const handler = handlers[path];
 
-            if (handler) {
-                return Promise.resolve(handler(opts.method ?? 'GET', opts.body ? JSON.parse(opts.body as string) : undefined));
-            }
+                if (handler) {
+                    return Promise.resolve(
+                        handler(opts.method ?? 'GET', opts.body ? JSON.parse(opts.body as string) : undefined),
+                    );
+                }
 
-            return Promise.resolve(
-                new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 }),
-            );
-        });
+                return Promise.resolve(
+                    new Response(JSON.stringify({ error: 'Not Found' }), { status: 404 }),
+                );
+            }),
+        );
     }
 
     // ── Complete Payment Flow ────────────────────────────────────────────
@@ -118,22 +129,24 @@ describe('SDK Integration – End-to-End Workflows', () => {
                 created_at: `2026-02-${String(i + 1).padStart(2, '0')}T00:00:00Z`,
             }));
 
-            globalThis.fetch = mock((url: string | URL) => {
-                const parsedUrl = new URL(url.toString());
-                const limit = parseInt(parsedUrl.searchParams.get('limit') ?? '10');
-                const offset = parseInt(parsedUrl.searchParams.get('offset') ?? '0');
-                const page = allPayments.slice(offset, offset + limit);
+            setFetch(
+                mock((url: string | URL) => {
+                    const parsedUrl = new URL(url.toString());
+                    const limit = parseInt(parsedUrl.searchParams.get('limit') ?? '10');
+                    const offset = parseInt(parsedUrl.searchParams.get('offset') ?? '0');
+                    const page = allPayments.slice(offset, offset + limit);
 
-                return Promise.resolve(
-                    new Response(
-                        JSON.stringify({
-                            data: page,
-                            meta: { total: allPayments.length, limit, offset },
-                        }),
-                        { status: 200 },
-                    ),
-                );
-            });
+                    return Promise.resolve(
+                        new Response(
+                            JSON.stringify({
+                                data: page,
+                                meta: { total: allPayments.length, limit, offset },
+                            }),
+                            { status: 200 },
+                        ),
+                    );
+                }),
+            );
 
             const payark = new PayArk({
                 apiKey: 'sk_test',
@@ -163,11 +176,13 @@ describe('SDK Integration – End-to-End Workflows', () => {
 
     describe('error recovery', () => {
         test('should handle auth failure gracefully', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    new Response(
-                        JSON.stringify({ error: 'Unauthorized: API key revoked' }),
-                        { status: 401 },
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        new Response(
+                            JSON.stringify({ error: 'Unauthorized: API key revoked' }),
+                            { status: 401 },
+                        ),
                     ),
                 ),
             );
@@ -195,17 +210,19 @@ describe('SDK Integration – End-to-End Workflows', () => {
         });
 
         test('should handle validation errors with structured details', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    new Response(
-                        JSON.stringify({
-                            error: 'Validation failed',
-                            details: {
-                                amount: 'Must be a positive integer',
-                                provider: 'Must be one of: esewa, khalti',
-                            },
-                        }),
-                        { status: 400 },
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        new Response(
+                            JSON.stringify({
+                                error: 'Validation failed',
+                                details: {
+                                    amount: 'Must be a positive integer',
+                                    provider: 'Must be one of: esewa, khalti',
+                                },
+                            }),
+                            { status: 400 },
+                        ),
                     ),
                 ),
             );
@@ -237,23 +254,25 @@ describe('SDK Integration – End-to-End Workflows', () => {
         test('should recover from transient server errors via retry', async () => {
             let callCount = 0;
 
-            globalThis.fetch = mock(() => {
-                callCount++;
-                if (callCount <= 2) {
+            setFetch(
+                mock(() => {
+                    callCount++;
+                    if (callCount <= 2) {
+                        return Promise.resolve(
+                            new Response(JSON.stringify({ error: 'Service overloaded' }), { status: 503 }),
+                        );
+                    }
                     return Promise.resolve(
-                        new Response(JSON.stringify({ error: 'Service overloaded' }), { status: 503 }),
+                        new Response(
+                            JSON.stringify({
+                                data: [],
+                                meta: { total: 0, limit: 10, offset: 0 },
+                            }),
+                            { status: 200 },
+                        ),
                     );
-                }
-                return Promise.resolve(
-                    new Response(
-                        JSON.stringify({
-                            data: [],
-                            meta: { total: 0, limit: 10, offset: 0 },
-                        }),
-                        { status: 200 },
-                    ),
-                );
-            });
+                }),
+            );
 
             const payark = new PayArk({
                 apiKey: 'sk_test',
@@ -272,19 +291,21 @@ describe('SDK Integration – End-to-End Workflows', () => {
 
     describe('khalti provider', () => {
         test('should create checkout with khalti-specific response', async () => {
-            globalThis.fetch = mock(() =>
-                Promise.resolve(
-                    new Response(
-                        JSON.stringify({
-                            id: 'pay_khalti_001',
-                            checkout_url: 'https://payark.com/checkout/pay_khalti_001',
-                            payment_method: {
-                                type: 'khalti',
-                                url: 'https://khalti.com/pay/pay_khalti_001',
-                                method: 'GET',
-                            },
-                        }),
-                        { status: 200 },
+            setFetch(
+                mock(() =>
+                    Promise.resolve(
+                        new Response(
+                            JSON.stringify({
+                                id: 'pay_khalti_001',
+                                checkout_url: 'https://payark.com/checkout/pay_khalti_001',
+                                payment_method: {
+                                    type: 'khalti',
+                                    url: 'https://khalti.com/pay/pay_khalti_001',
+                                    method: 'GET',
+                                },
+                            }),
+                            { status: 200 },
+                        ),
                     ),
                 ),
             );

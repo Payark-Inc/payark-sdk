@@ -11,7 +11,7 @@
 //   - Edge cases (empty bodies, non-JSON errors, 204 responses)
 // ---------------------------------------------------------------------------
 
-import { describe, test, expect, mock, afterEach, beforeEach } from 'bun:test';
+import { describe, test, expect, mock, afterEach } from 'bun:test';
 import { HttpClient } from '../../src/http';
 import { PayArkError } from '../../src/errors';
 
@@ -36,13 +36,29 @@ function textResponse(text: string, status: number): Response {
     });
 }
 
-function createClient(overrides: Partial<{ apiKey: string; baseUrl: string; timeout: number; maxRetries: number }> = {}): HttpClient {
+function createClient(
+    overrides: Partial<{ apiKey: string; baseUrl: string; timeout: number; maxRetries: number }> = {},
+): HttpClient {
     return new HttpClient({
         apiKey: overrides.apiKey ?? 'sk_test_key_12345',
         baseUrl: overrides.baseUrl ?? 'https://mock.payark.test',
         timeout: overrides.timeout ?? 5000,
         maxRetries: overrides.maxRetries ?? 0,
     });
+}
+
+/**
+ * Safely assign a mock to `globalThis.fetch` without Bun's `preconnect` type error.
+ * Bun extends the Fetch API with a non-standard `preconnect` method which causes
+ * type mismatches with `mock()`. This helper avoids sprinkling `as any` everywhere.
+ */
+function setFetch(fn: (...args: any[]) => any): void {
+    (globalThis as any).fetch = fn;
+}
+
+/** Read recorded mock calls from the mock fetch. */
+function fetchMock(): { mock: { calls: any[][] } } {
+    return globalThis.fetch as any;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -80,31 +96,31 @@ describe('HttpClient', () => {
 
         test('should trim whitespace from apiKey', async () => {
             const client = createClient({ apiKey: '  sk_test_spaced  ' });
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({ ok: true })));
+            setFetch(mock(() => Promise.resolve(mockResponse({ ok: true }))));
 
             await client.request('GET', '/test');
 
-            const [, opts] = (globalThis.fetch as any).mock.calls[0];
+            const [, opts] = fetchMock().mock.calls[0];
             expect(opts.headers.Authorization).toBe('Bearer sk_test_spaced');
         });
 
         test('should strip trailing slashes from baseUrl', async () => {
             const client = createClient({ baseUrl: 'https://api.test.com///' });
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({ ok: true })));
+            setFetch(mock(() => Promise.resolve(mockResponse({ ok: true }))));
 
             await client.request('GET', '/v1/test');
 
-            const url = (globalThis.fetch as any).mock.calls[0][0].toString();
+            const url = fetchMock().mock.calls[0][0].toString();
             expect(url).toBe('https://api.test.com/v1/test');
         });
 
         test('should use default baseUrl when not provided', async () => {
             const client = new HttpClient({ apiKey: 'sk_test' });
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({ ok: true })));
+            setFetch(mock(() => Promise.resolve(mockResponse({ ok: true }))));
 
             await client.request('GET', '/v1/test');
 
-            const url = (globalThis.fetch as any).mock.calls[0][0].toString();
+            const url = fetchMock().mock.calls[0][0].toString();
             expect(url).toStartWith('https://api.payark.com');
         });
     });
@@ -114,67 +130,67 @@ describe('HttpClient', () => {
     describe('request construction', () => {
         test('should send correct HTTP method', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('POST', '/v1/checkout', { body: {} });
 
-            const [, opts] = (globalThis.fetch as any).mock.calls[0];
+            const [, opts] = fetchMock().mock.calls[0];
             expect(opts.method).toBe('POST');
         });
 
         test('should send Authorization header with Bearer token', async () => {
             const client = createClient({ apiKey: 'sk_live_secret_key' });
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/test');
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers.Authorization).toBe('Bearer sk_live_secret_key');
         });
 
         test('should send Content-Type and Accept headers', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/test');
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers['Content-Type']).toBe('application/json');
             expect(headers['Accept']).toBe('application/json');
         });
 
         test('should send User-Agent header with SDK version', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/test');
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers['User-Agent']).toMatch(/^payark-sdk-node\//);
         });
 
         test('should merge custom headers', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/test', {
                 headers: { 'X-Custom-Header': 'custom-value' },
             });
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers['X-Custom-Header']).toBe('custom-value');
-            expect(headers.Authorization).toBeDefined(); // default headers still present
+            expect(headers.Authorization).toBeDefined();
         });
 
         test('should allow custom headers to override defaults', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/test', {
                 headers: { 'Content-Type': 'text/plain' },
             });
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers['Content-Type']).toBe('text/plain');
         });
     });
@@ -184,59 +200,59 @@ describe('HttpClient', () => {
     describe('URL construction', () => {
         test('should construct correct URL from base + path', async () => {
             const client = createClient({ baseUrl: 'https://api.payark.com' });
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/payments');
 
-            const url = (globalThis.fetch as any).mock.calls[0][0].toString();
+            const url = fetchMock().mock.calls[0][0].toString();
             expect(url).toBe('https://api.payark.com/v1/payments');
         });
 
         test('should append query parameters to URL', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/payments', {
                 query: { limit: 25, offset: 50 },
             });
 
-            const url = new URL((globalThis.fetch as any).mock.calls[0][0]);
+            const url = new URL(fetchMock().mock.calls[0][0]);
             expect(url.searchParams.get('limit')).toBe('25');
             expect(url.searchParams.get('offset')).toBe('50');
         });
 
         test('should filter out undefined query params', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/payments', {
                 query: { limit: 10, offset: undefined },
             });
 
-            const url = new URL((globalThis.fetch as any).mock.calls[0][0]);
+            const url = new URL(fetchMock().mock.calls[0][0]);
             expect(url.searchParams.get('limit')).toBe('10');
             expect(url.searchParams.has('offset')).toBe(false);
         });
 
         test('should handle empty query params object', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/payments', { query: {} });
 
-            const url = new URL((globalThis.fetch as any).mock.calls[0][0]);
+            const url = new URL(fetchMock().mock.calls[0][0]);
             expect(url.search).toBe('');
         });
 
         test('should convert number query params to strings', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/payments', {
                 query: { limit: 100 },
             });
 
-            const url = new URL((globalThis.fetch as any).mock.calls[0][0]);
+            const url = new URL(fetchMock().mock.calls[0][0]);
             expect(url.searchParams.get('limit')).toBe('100');
         });
     });
@@ -246,33 +262,33 @@ describe('HttpClient', () => {
     describe('request body', () => {
         test('should JSON stringify the body for POST requests', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             const body = { amount: 500, provider: 'esewa' };
             await client.request('POST', '/v1/checkout', { body });
 
-            const sentBody = JSON.parse((globalThis.fetch as any).mock.calls[0][1].body);
+            const sentBody = JSON.parse(fetchMock().mock.calls[0][1].body);
             expect(sentBody.amount).toBe(500);
             expect(sentBody.provider).toBe('esewa');
         });
 
         test('should NOT include body for GET requests even if provided', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/payments', { body: { foo: 'bar' } });
 
-            const sentBody = (globalThis.fetch as any).mock.calls[0][1].body;
+            const sentBody = fetchMock().mock.calls[0][1].body;
             expect(sentBody).toBeUndefined();
         });
 
         test('should handle undefined body without crashing', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('POST', '/v1/checkout');
 
-            const sentBody = (globalThis.fetch as any).mock.calls[0][1].body;
+            const sentBody = fetchMock().mock.calls[0][1].body;
             expect(sentBody).toBeUndefined();
         });
     });
@@ -282,52 +298,52 @@ describe('HttpClient', () => {
     describe('idempotency', () => {
         test('should include Idempotency-Key header for POST requests', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('POST', '/v1/checkout', { body: {} });
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers['Idempotency-Key']).toBeDefined();
             expect(headers['Idempotency-Key'].length).toBeGreaterThan(0);
         });
 
         test('should include Idempotency-Key header for PUT requests', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('PUT', '/v1/test', { body: {} });
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers['Idempotency-Key']).toBeDefined();
         });
 
         test('should include Idempotency-Key header for PATCH requests', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('PATCH', '/v1/test', { body: {} });
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers['Idempotency-Key']).toBeDefined();
         });
 
         test('should NOT include Idempotency-Key for GET requests', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('GET', '/v1/payments');
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers['Idempotency-Key']).toBeUndefined();
         });
 
         test('should NOT include Idempotency-Key for DELETE requests', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             await client.request('DELETE', '/v1/test');
 
-            const headers = (globalThis.fetch as any).mock.calls[0][1].headers;
+            const headers = fetchMock().mock.calls[0][1].headers;
             expect(headers['Idempotency-Key']).toBeUndefined();
         });
 
@@ -335,10 +351,12 @@ describe('HttpClient', () => {
             const client = createClient();
             const keys: string[] = [];
 
-            globalThis.fetch = mock((_, opts: any) => {
-                keys.push(opts.headers['Idempotency-Key']);
-                return Promise.resolve(mockResponse({}));
-            });
+            setFetch(
+                mock((_: any, opts: any) => {
+                    keys.push(opts.headers['Idempotency-Key']);
+                    return Promise.resolve(mockResponse({}));
+                }),
+            );
 
             await client.request('POST', '/v1/checkout', { body: {} });
             await client.request('POST', '/v1/checkout', { body: {} });
@@ -353,7 +371,7 @@ describe('HttpClient', () => {
         test('should parse JSON response body', async () => {
             const client = createClient();
             const responseData = { id: 'pay_123', status: 'success' };
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse(responseData)));
+            setFetch(mock(() => Promise.resolve(mockResponse(responseData))));
 
             const result = await client.request<typeof responseData>('GET', '/test');
 
@@ -363,7 +381,7 @@ describe('HttpClient', () => {
 
         test('should return empty object for 204 No Content', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.resolve(emptyResponse(204)));
+            setFetch(mock(() => Promise.resolve(emptyResponse(204))));
 
             const result = await client.request('DELETE', '/test');
 
@@ -376,7 +394,7 @@ describe('HttpClient', () => {
                 data: [{ id: 'pay_1' }, { id: 'pay_2' }],
                 meta: { total: 2, limit: 10, offset: 0 },
             };
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse(responseData)));
+            setFetch(mock(() => Promise.resolve(mockResponse(responseData))));
 
             const result = await client.request<typeof responseData>('GET', '/test');
 
@@ -390,9 +408,7 @@ describe('HttpClient', () => {
     describe('error handling', () => {
         test('should throw PayArkError with authentication_error on 401', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Unauthorized: Invalid API Key' }, 401)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Unauthorized: Invalid API Key' }, 401))));
 
             try {
                 await client.request('GET', '/test');
@@ -406,9 +422,7 @@ describe('HttpClient', () => {
 
         test('should throw PayArkError with forbidden_error on 403', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Forbidden' }, 403)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Forbidden' }, 403))));
 
             try {
                 await client.request('GET', '/test');
@@ -422,7 +436,7 @@ describe('HttpClient', () => {
         test('should throw PayArkError with invalid_request_error on 400', async () => {
             const client = createClient();
             const errorBody = { error: 'Validation Error', details: { amount: 'Required' } };
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse(errorBody, 400)));
+            setFetch(mock(() => Promise.resolve(mockResponse(errorBody, 400))));
 
             try {
                 await client.request('POST', '/test', { body: {} });
@@ -435,9 +449,7 @@ describe('HttpClient', () => {
 
         test('should throw PayArkError with invalid_request_error on 422', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Unprocessable Entity' }, 422)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Unprocessable Entity' }, 422))));
 
             try {
                 await client.request('POST', '/test', { body: {} });
@@ -450,9 +462,7 @@ describe('HttpClient', () => {
 
         test('should throw PayArkError with not_found_error on 404', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Payment not found' }, 404)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Payment not found' }, 404))));
 
             try {
                 await client.request('GET', '/test');
@@ -464,9 +474,7 @@ describe('HttpClient', () => {
 
         test('should throw PayArkError with rate_limit_error on 429', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Too many requests' }, 429)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Too many requests' }, 429))));
 
             try {
                 await client.request('GET', '/test');
@@ -479,9 +487,7 @@ describe('HttpClient', () => {
 
         test('should handle non-JSON error response body gracefully', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() =>
-                Promise.resolve(textResponse('Internal Server Error', 500)),
-            );
+            setFetch(mock(() => Promise.resolve(textResponse('Internal Server Error', 500))));
 
             try {
                 await client.request('GET', '/test');
@@ -495,7 +501,7 @@ describe('HttpClient', () => {
 
         test('should throw network_error on DNS/connection failure', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.reject(new Error('ECONNREFUSED')));
+            setFetch(mock(() => Promise.reject(new Error('ECONNREFUSED'))));
 
             try {
                 await client.request('GET', '/test');
@@ -509,7 +515,7 @@ describe('HttpClient', () => {
 
         test('should throw network_error on TypeError (fetch not available)', async () => {
             const client = createClient();
-            globalThis.fetch = mock(() => Promise.reject(new TypeError('fetch is not a function')));
+            setFetch(mock(() => Promise.reject(new TypeError('fetch is not a function'))));
 
             try {
                 await client.request('GET', '/test');
@@ -528,7 +534,7 @@ describe('HttpClient', () => {
                     provider: { _errors: ['Invalid provider'] },
                 },
             };
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse(rawBody, 400)));
+            setFetch(mock(() => Promise.resolve(mockResponse(rawBody, 400))));
 
             try {
                 await client.request('POST', '/test', { body: {} });
@@ -544,9 +550,7 @@ describe('HttpClient', () => {
     describe('retry behaviour', () => {
         test('should NOT retry on 4xx client errors', async () => {
             const client = createClient({ maxRetries: 3 });
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Bad Request' }, 400)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Bad Request' }, 400))));
 
             try {
                 await client.request('GET', '/test');
@@ -559,9 +563,7 @@ describe('HttpClient', () => {
 
         test('should NOT retry on 401', async () => {
             const client = createClient({ maxRetries: 3 });
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Unauthorized' }, 401)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Unauthorized' }, 401))));
 
             try {
                 await client.request('GET', '/test');
@@ -574,9 +576,7 @@ describe('HttpClient', () => {
 
         test('should NOT retry on 404', async () => {
             const client = createClient({ maxRetries: 2 });
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Not Found' }, 404)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Not Found' }, 404))));
 
             try {
                 await client.request('GET', '/test');
@@ -589,9 +589,7 @@ describe('HttpClient', () => {
 
         test('should retry on 500 server error up to maxRetries', async () => {
             const client = createClient({ maxRetries: 2, timeout: 60_000 });
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Internal Server Error' }, 500)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Internal Server Error' }, 500))));
 
             try {
                 await client.request('GET', '/test');
@@ -605,9 +603,7 @@ describe('HttpClient', () => {
 
         test('should retry on 502 Bad Gateway', async () => {
             const client = createClient({ maxRetries: 1, timeout: 60_000 });
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Bad Gateway' }, 502)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Bad Gateway' }, 502))));
 
             try {
                 await client.request('GET', '/test');
@@ -620,9 +616,7 @@ describe('HttpClient', () => {
 
         test('should retry on 503 Service Unavailable', async () => {
             const client = createClient({ maxRetries: 1, timeout: 60_000 });
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Service Unavailable' }, 503)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Service Unavailable' }, 503))));
 
             try {
                 await client.request('GET', '/test');
@@ -635,7 +629,7 @@ describe('HttpClient', () => {
 
         test('should retry on network errors', async () => {
             const client = createClient({ maxRetries: 1, timeout: 60_000 });
-            globalThis.fetch = mock(() => Promise.reject(new Error('ECONNRESET')));
+            setFetch(mock(() => Promise.reject(new Error('ECONNRESET'))));
 
             try {
                 await client.request('GET', '/test');
@@ -650,13 +644,15 @@ describe('HttpClient', () => {
             const client = createClient({ maxRetries: 3, timeout: 60_000 });
             let callCount = 0;
 
-            globalThis.fetch = mock(() => {
-                callCount++;
-                if (callCount === 1) {
-                    return Promise.resolve(mockResponse({ error: 'Server Error' }, 500));
-                }
-                return Promise.resolve(mockResponse({ id: 'recovered' }));
-            });
+            setFetch(
+                mock(() => {
+                    callCount++;
+                    if (callCount === 1) {
+                        return Promise.resolve(mockResponse({ error: 'Server Error' }, 500));
+                    }
+                    return Promise.resolve(mockResponse({ id: 'recovered' }));
+                }),
+            );
 
             const result = await client.request<{ id: string }>('GET', '/test');
 
@@ -666,9 +662,7 @@ describe('HttpClient', () => {
 
         test('should throw the LAST error after all retries are exhausted', async () => {
             const client = createClient({ maxRetries: 1, timeout: 60_000 });
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Server is on fire' }, 503)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Server is on fire' }, 503))));
 
             try {
                 await client.request('GET', '/test');
@@ -682,9 +676,7 @@ describe('HttpClient', () => {
 
         test('should use maxRetries=0 to disable retrying', async () => {
             const client = createClient({ maxRetries: 0 });
-            globalThis.fetch = mock(() =>
-                Promise.resolve(mockResponse({ error: 'Error' }, 500)),
-            );
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Error' }, 500))));
 
             try {
                 await client.request('GET', '/test');
@@ -699,10 +691,12 @@ describe('HttpClient', () => {
             const client = createClient({ maxRetries: 1, timeout: 60_000 });
             const keys: string[] = [];
 
-            globalThis.fetch = mock((_, opts: any) => {
-                keys.push(opts.headers['Idempotency-Key']);
-                return Promise.resolve(mockResponse({ error: 'Error' }, 500));
-            });
+            setFetch(
+                mock((_: any, opts: any) => {
+                    keys.push(opts.headers['Idempotency-Key']);
+                    return Promise.resolve(mockResponse({ error: 'Error' }, 500));
+                }),
+            );
 
             try {
                 await client.request('POST', '/test', { body: {} });
@@ -723,10 +717,12 @@ describe('HttpClient', () => {
             const client = createClient({ timeout: 1000 });
             let receivedSignal: AbortSignal | undefined;
 
-            globalThis.fetch = mock((_, opts: any) => {
-                receivedSignal = opts.signal;
-                return Promise.resolve(mockResponse({}));
-            });
+            setFetch(
+                mock((_: any, opts: any) => {
+                    receivedSignal = opts.signal;
+                    return Promise.resolve(mockResponse({}));
+                }),
+            );
 
             await client.request('GET', '/test');
 
@@ -736,9 +732,7 @@ describe('HttpClient', () => {
 
         test('should allow per-request timeout override', async () => {
             const client = createClient({ timeout: 30_000 });
-            // No easy way to verify the timeout value directly,
-            // but we can verify the request completes with a custom timeout
-            globalThis.fetch = mock(() => Promise.resolve(mockResponse({})));
+            setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
             const result = await client.request('GET', '/test', { timeout: 1000 });
             expect(result).toEqual({});
