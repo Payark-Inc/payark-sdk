@@ -30,3 +30,7 @@ export type {
     // Error body
     PayArkErrorBody,
 } from './types';
+
+// ── Version ────────────────────────────────────────────────────────────────
+/** SDK version string for runtime introspection. */
+export const SDK_VERSION = '0.1.0' as const;
