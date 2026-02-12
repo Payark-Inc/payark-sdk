@@ -1,0 +1,42 @@
+{
+    "name": "@payark/sdk",
+    "version": "0.1.0",
+    "description": "Official TypeScript SDK for the PayArk payment gateway API.",
+    "main": "dist/index.js",
+    "module": "dist/index.mjs",
+    "types": "dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/index.mjs",
+            "require": "./dist/index.js"
+        }
+    },
+    "files": [
+        "dist",
+        "README.md"
+    ],
+    "scripts": {
+        "build": "tsup",
+        "dev": "tsup --watch",
+        "test": "bun test",
+        "lint": "tsc --noEmit",
+        "prepublishOnly": "bun run build"
+    },
+    "keywords": [
+        "payark",
+        "payment",
+        "nepal",
+        "esewa",
+        "khalti",
+        "gateway",
+        "sdk"
+    ],
+    "author": "PayArk",
+    "license": "MIT",
+    "devDependencies": {
+        "tsup": "^8.0.0",
+        "typescript": "^5.7.0",
+        "@types/node": "^20.0.0"
+    }
+}
