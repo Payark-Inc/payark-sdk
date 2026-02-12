@@ -2,7 +2,7 @@
 
 The official TypeScript SDK for the [PayArk](https://payark.com) payment gateway API.
 
-> **Zero dependencies** · **Type-safe** · **Node 18+ / Bun / Deno**
+> **Zero dependencies** · **Type-safe** · **Retry-safe (idempotent)** · **Node 18+ / Bun / Deno**
 
 ---
 
@@ -42,10 +42,10 @@ console.log(session.checkout_url);
 
 ```ts
 const payark = new PayArk({
-  apiKey: 'sk_test_...',      // Required – your project secret key
+  apiKey: 'sk_test_...',           // Required – your project secret key
   baseUrl: 'http://localhost:3001', // Optional – for local dev
-  timeout: 10_000,            // Optional – request timeout in ms (default: 30s)
-  maxRetries: 2,              // Optional – retries on 5xx errors (default: 2)
+  timeout: 10_000,                 // Optional – request timeout in ms (default: 30s)
+  maxRetries: 2,                   // Optional – retries on 5xx errors (default: 2)
 });
 ```
 
@@ -118,7 +118,7 @@ console.log(payment.status); // → "success"
 
 ## Error Handling
 
-All errors thrown by the SDK are instances of `PayArkError`, which extends the native `Error` class.
+All errors thrown by the SDK are instances of `PayArkError`, which extends `Error` with structured metadata.
 
 ```ts
 import { PayArk, PayArkError } from '@payark/sdk';
@@ -131,6 +131,9 @@ try {
     console.error(err.statusCode); // 401
     console.error(err.message);    // "Unauthorized: Invalid API Key"
     console.error(err.raw);        // Original API error body
+
+    // Structured logging
+    console.log(JSON.stringify(err.toJSON()));
   }
 }
 ```
@@ -140,19 +143,22 @@ try {
 | Code | HTTP Status | Description |
 |------|-------------|-------------|
 | `authentication_error` | 401 | Invalid or missing API key |
+| `forbidden_error` | 403 | Valid auth but insufficient permissions |
 | `invalid_request_error` | 400 / 422 | Bad request parameters |
 | `not_found_error` | 404 | Resource not found |
 | `rate_limit_error` | 429 | Too many requests |
 | `api_error` | 500+ | Server-side failure |
 | `network_error` | — | DNS, timeout, or connection error |
 
-## Retries
+## Retries & Idempotency
 
-The SDK automatically retries **server errors (5xx)** with exponential back-off and jitter. Client errors (4xx) fail immediately since they are deterministic.
+The SDK automatically retries **server errors (500, 502, 503, 504)** with exponential back-off and jitter. Client errors (4xx) fail immediately since they are deterministic.
 
 - Default: 2 retries
 - Back-off: 500ms → 1s → 2s (+ random jitter)
 - Set `maxRetries: 0` to disable
+
+**Idempotency:** All mutating requests (POST, PUT, PATCH) automatically include an `Idempotency-Key` header. The same key is reused across retry attempts for a given call, ensuring that retried payments are never accidentally duplicated.
 
 ## TypeScript
 
@@ -168,7 +174,36 @@ import type {
   PaymentStatus,
   Provider,
   PaginatedResponse,
+  PayArkErrorBody,
 } from '@payark/sdk';
+```
+
+## Development
+
+```bash
+# Install dependencies
+bun install
+
+# Run tests
+bun test
+
+# Build (CJS + ESM + types)
+bun run build
+
+# Type check
+bun run lint
+```
+
+### Test Suite
+
+```
+tests/
+├── unit/
+│   ├── errors.test.ts     – Error class + errorCodeFromStatus mapping
+│   ├── http.test.ts        – HTTP transport, retries, idempotency, timeouts
+│   └── client.test.ts      – PayArk client, resources, request construction
+└── integration/
+    └── sdk.test.ts          – End-to-end workflows (checkout → payment → recovery)
 ```
 
 ## License
