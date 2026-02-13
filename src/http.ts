@@ -35,7 +35,7 @@ export interface RequestOptions {
 }
 
 /** HTTP status codes that signal a retryable server failure. */
-const RETRYABLE_STATUS_CODES = new Set([500, 502, 503, 504]);
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 
 /** Methods that mutate state and require idempotency protection. */
 const MUTATING_METHODS = new Set<HttpMethod>(['POST', 'PUT', 'PATCH']);
@@ -99,6 +99,8 @@ export class HttpClient {
             const controller = new AbortController();
             const timer = setTimeout(() => controller.abort(), requestTimeout);
 
+            let retryAfterMs = 0;
+
             try {
                 const response = await fetch(url.toString(), {
                     ...baseInit,
@@ -126,7 +128,24 @@ export class HttpClient {
                     errorBody?.error ?? `PayArk API error: ${response.status} ${response.statusText}`;
                 lastError = new PayArkError(message, response.status, code, errorBody);
 
+                // Handle Rate Limiting (429) - Retry-After
+                if (response.status === 429) {
+                    const retryHeader = response.headers.get('Retry-After');
+                    if (retryHeader) {
+                        if (/^\d+$/.test(retryHeader)) {
+                            retryAfterMs = parseInt(retryHeader, 10) * 1000;
+                        } else {
+                            // Try parsing HTTP Date
+                            const date = Date.parse(retryHeader);
+                            if (!isNaN(date)) {
+                                retryAfterMs = Math.max(0, date - Date.now());
+                            }
+                        }
+                    }
+                }
+
                 // Client errors (4xx) are deterministic – retrying won't help
+                // UNLESS it's 429 (Rate Limit)
                 if (!RETRYABLE_STATUS_CODES.has(response.status)) {
                     throw lastError;
                 }
@@ -135,7 +154,7 @@ export class HttpClient {
 
                 if (error instanceof PayArkError) {
                     lastError = error;
-                    // Don't retry client-side errors
+                    // Don't retry client-side errors unless retryable (429)
                     if (error.statusCode > 0 && !RETRYABLE_STATUS_CODES.has(error.statusCode)) {
                         throw error;
                     }
@@ -156,11 +175,18 @@ export class HttpClient {
                 }
             }
 
-            // Exponential back-off: 500ms, 1000ms, 2000ms... + jitter (0-200ms)
+            // Calculate delay: prefer Retry-After, else Exponential Back-off
             if (attempt < this.maxRetries) {
-                const baseDelay = 500 * Math.pow(2, attempt);
-                const jitter = Math.random() * 200;
-                await this.sleep(baseDelay + jitter);
+                let delay = 0;
+
+                if (retryAfterMs > 0) {
+                    delay = retryAfterMs;
+                } else {
+                    // Exponential back-off: 500ms, 1000ms, 2000ms... + jitter (0-200ms)
+                    delay = 500 * Math.pow(2, attempt) + (Math.random() * 200);
+                }
+
+                await this.sleep(delay);
             }
         }
 

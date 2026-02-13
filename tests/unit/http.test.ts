@@ -17,11 +17,11 @@ import { PayArkError } from '../../src/errors';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-function mockResponse(body: unknown, status = 200): Response {
+function mockResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
     return new Response(JSON.stringify(body), {
         status,
         statusText: status === 200 ? 'OK' : status === 404 ? 'Not Found' : 'Error',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...headers },
     });
 }
 
@@ -585,6 +585,39 @@ describe('HttpClient', () => {
             }
 
             expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+        });
+
+        test('should retry on 429 Too Many Requests', async () => {
+            const client = createClient({ maxRetries: 1 });
+            setFetch(mock(() => Promise.resolve(mockResponse({ error: 'Too Many Requests' }, 429))));
+
+            try {
+                await client.request('GET', '/test');
+            } catch {
+                // Expected
+            }
+
+            expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+        });
+
+        test('should respect Retry-After header (seconds)', async () => {
+            const client = createClient({ maxRetries: 1 });
+            const timestamps: number[] = [];
+
+            setFetch(mock(() => {
+                timestamps.push(Date.now());
+                return Promise.resolve(mockResponse({ error: 'Slow down' }, 429, { 'Retry-After': '1' }));
+            }));
+
+            try {
+                await client.request('GET', '/test');
+            } catch {
+                // Expected
+            }
+
+            expect(timestamps.length).toBe(2);
+            const delay = timestamps[1] - timestamps[0];
+            expect(delay).toBeGreaterThanOrEqual(1000);
         });
 
         test('should retry on 500 server error up to maxRetries', async () => {
