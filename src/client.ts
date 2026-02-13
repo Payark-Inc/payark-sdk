@@ -13,6 +13,7 @@
 import { HttpClient } from './http';
 import { CheckoutResource } from './resources/checkout';
 import { PaymentsResource } from './resources/payments';
+import { WebhooksResource } from './resources/webhooks';
 import type { PayArkConfig } from './types';
 
 /**
@@ -47,6 +48,23 @@ import type { PayArkConfig } from './types';
 export class PayArk {
     /** Internal HTTP transport – shared across all resources. */
     private readonly http: HttpClient;
+
+    /**
+     * Static webhook verification utility.
+     *
+     * Does NOT require an SDK instance — used to verify incoming webhook
+     * signatures in your server's request handler.
+     *
+     * @example
+     * ```ts
+     * const isValid = await PayArk.webhooks.verify(
+     *   rawBody,
+     *   req.headers['x-payark-signature'],
+     *   process.env.PAYARK_WEBHOOK_SECRET!,
+     * );
+     * ```
+     */
+    static readonly webhooks = new WebhooksResource();
 
     // ── Resource instances (lazy-initialised) ────────────────────────────────
     private _checkout?: CheckoutResource;
