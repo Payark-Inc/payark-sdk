@@ -22,15 +22,15 @@ pnpm add @payark/sdk
 ## Quick Start
 
 ```ts
-import { PayArk } from '@payark/sdk';
+import { PayArk } from "@payark/sdk";
 
-const payark = new PayArk({ apiKey: 'sk_live_...' });
+const payark = new PayArk({ apiKey: "sk_live_..." });
 
 // Create a checkout session
 const session = await payark.checkout.create({
   amount: 500,
-  provider: 'esewa',
-  returnUrl: 'https://your-site.com/thank-you',
+  provider: "esewa",
+  returnUrl: "https://your-site.com/thank-you",
 });
 
 // Redirect user to the hosted checkout page
@@ -42,10 +42,29 @@ console.log(session.checkout_url);
 
 ```ts
 const payark = new PayArk({
-  apiKey: 'sk_test_...',           // Required – your project secret key
-  baseUrl: 'http://localhost:3001', // Optional – for local dev
-  timeout: 10_000,                 // Optional – request timeout in ms (default: 30s)
-  maxRetries: 2,                   // Optional – retries on 5xx errors (default: 2)
+  apiKey: "sk_test_...", // Required – your project secret key
+  sandbox: true, // Optional – enable Sandbox Mode (default: false)
+  baseUrl: "http://localhost:3001", // Optional – for local dev
+  timeout: 10_000, // Optional – request timeout in ms (default: 30s)
+  maxRetries: 2, // Optional – retries on 5xx errors (default: 2)
+});
+```
+
+## Sandbox Mode
+
+PayArk provides a **Sandbox Mode** to test your integration without moving real money or needing real provider credentials (e.g. eSewa merchant keys).
+
+When `sandbox: true` is enabled:
+
+1. Requests include the `x-sandbox-mode: true` header.
+2. The API bypasses real provider validation.
+3. Payments are marked as `test: true` in the database.
+4. You can simulate various payment outcomes via the sandbox gateway.
+
+```ts
+const payark = new PayArk({
+  apiKey: "sk_test_something",
+  sandbox: true,
 });
 ```
 
@@ -55,14 +74,14 @@ const payark = new PayArk({
 
 Create a new payment checkout session.
 
-| Parameter   | Type     | Required | Description |
-|-------------|----------|----------|-------------|
-| `amount`    | `number` | ✅       | Payment amount in the base currency unit |
-| `provider`  | `'esewa' \| 'khalti'` | ✅ | Payment provider |
-| `returnUrl` | `string` | ✅       | URL to redirect after successful payment |
-| `currency`  | `string` | ❌       | ISO currency code (default: `"NPR"`) |
-| `cancelUrl` | `string` | ❌       | URL to redirect on cancellation |
-| `metadata`  | `Record<string, unknown>` | ❌ | Arbitrary metadata (e.g. `order_id`) |
+| Parameter   | Type                      | Required | Description                              |
+| ----------- | ------------------------- | -------- | ---------------------------------------- |
+| `amount`    | `number`                  | ✅       | Payment amount in the base currency unit |
+| `provider`  | `'esewa' \| 'khalti'`     | ✅       | Payment provider                         |
+| `returnUrl` | `string`                  | ✅       | URL to redirect after successful payment |
+| `currency`  | `string`                  | ❌       | ISO currency code (default: `"NPR"`)     |
+| `cancelUrl` | `string`                  | ❌       | URL to redirect on cancellation          |
+| `metadata`  | `Record<string, unknown>` | ❌       | Arbitrary metadata (e.g. `order_id`)     |
 
 **Returns:** `Promise<CheckoutSession>`
 
@@ -71,9 +90,9 @@ interface CheckoutSession {
   id: string;
   checkout_url: string;
   payment_method: {
-    type: 'esewa' | 'khalti';
+    type: "esewa" | "khalti";
     url?: string;
-    method?: 'GET' | 'POST';
+    method?: "GET" | "POST";
     fields?: Record<string, string>;
   };
 }
@@ -85,10 +104,10 @@ interface CheckoutSession {
 
 List payments for the authenticated project.
 
-| Parameter | Type     | Required | Description |
-|-----------|----------|----------|-------------|
+| Parameter | Type     | Required | Description                      |
+| --------- | -------- | -------- | -------------------------------- |
 | `limit`   | `number` | ❌       | Max records (1–100, default: 10) |
-| `offset`  | `number` | ❌       | Pagination offset (default: 0) |
+| `offset`  | `number` | ❌       | Pagination offset (default: 0)   |
 
 **Returns:** `Promise<PaginatedResponse<Payment>>`
 
@@ -103,15 +122,50 @@ console.log(`Total: ${meta.total}`);
 
 Retrieve a single payment by ID.
 
-| Parameter | Type     | Required | Description |
-|-----------|----------|----------|-------------|
+| Parameter | Type     | Required | Description                    |
+| --------- | -------- | -------- | ------------------------------ |
 | `id`      | `string` | ✅       | Payment identifier (`pay_...`) |
 
 **Returns:** `Promise<Payment>`
 
 ```ts
-const payment = await payark.payments.retrieve('pay_abc123');
+const payment = await payark.payments.retrieve("pay_abc123");
 console.log(payment.status); // → "success"
+```
+
+---
+
+### `payark.webhooks.constructEvent(body, signature, secret)`
+
+Securely verify and parse incoming webhooks.
+
+| Parameter   | Type     | Required | Description                               |
+| ----------- | -------- | -------- | ----------------------------------------- |
+| `body`      | `string` | ✅       | The **raw** request body string           |
+| `signature` | `string` | ✅       | The `X-PayArk-Signature` header           |
+| `secret`    | `string` | ✅       | Your webhook signing secret (`whsec_...`) |
+
+**Returns:** `Promise<WebhookEvent>`
+
+```ts
+// Example for Hono/Node.js
+const body = await req.text(); // Raw body is required
+const sig = req.headers.get("x-payark-signature");
+
+try {
+  const event = await payark.webhooks.constructEvent(
+    body,
+    sig,
+    process.env.PAYARK_WH_SECRET,
+  );
+
+  if (event.type === "payment.succeeded") {
+    const payment = event.data;
+    // Provision services here
+  }
+} catch (err) {
+  // Signature verification failed or body is malformed
+}
 ```
 
 ---
@@ -140,15 +194,15 @@ try {
 
 ### Error Codes
 
-| Code | HTTP Status | Description |
-|------|-------------|-------------|
-| `authentication_error` | 401 | Invalid or missing API key |
-| `forbidden_error` | 403 | Valid auth but insufficient permissions |
-| `invalid_request_error` | 400 / 422 | Bad request parameters |
-| `not_found_error` | 404 | Resource not found |
-| `rate_limit_error` | 429 | Too many requests |
-| `api_error` | 500+ | Server-side failure |
-| `network_error` | — | DNS, timeout, or connection error |
+| Code                    | HTTP Status | Description                             |
+| ----------------------- | ----------- | --------------------------------------- |
+| `authentication_error`  | 401         | Invalid or missing API key              |
+| `permission_error`      | 403         | Valid auth but insufficient permissions |
+| `invalid_request_error` | 400 / 422   | Bad request parameters                  |
+| `not_found_error`       | 404         | Resource not found                      |
+| `rate_limit_error`      | 429         | Too many requests                       |
+| `api_error`             | 500+        | Server-side failure                     |
+| `connection_error`      | —           | DNS, timeout, or connection error       |
 
 ## Retries & Idempotency
 
@@ -175,7 +229,7 @@ import type {
   Provider,
   PaginatedResponse,
   PayArkErrorBody,
-} from '@payark/sdk';
+} from "@payark/sdk";
 ```
 
 ## Development
@@ -199,8 +253,9 @@ bun run lint
 ```
 tests/
 ├── unit/
-│   ├── errors.test.ts     – Error class + errorCodeFromStatus mapping
+│   ├── errors.test.ts     – Error class + factory mapping
 │   ├── http.test.ts        – HTTP transport, retries, idempotency, timeouts
+│   ├── sandbox.test.ts     – Sandbox Mode header injection
 │   └── client.test.ts      – PayArk client, resources, request construction
 └── integration/
     └── sdk.test.ts          – End-to-end workflows (checkout → payment → recovery)
