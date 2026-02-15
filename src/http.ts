@@ -40,6 +40,9 @@ const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 /** Methods that mutate state and require idempotency protection. */
 const MUTATING_METHODS = new Set<HttpMethod>(["POST", "PUT", "PATCH"]);
 
+/** Regex to match trailing slashes for base URL normalization. */
+const TRAILING_SLASH_REGEX = /\/+$/;
+
 /**
  * Internal HTTP client used by every resource module.
  *
@@ -64,7 +67,7 @@ export class HttpClient {
 
     this.apiKey = config.apiKey.trim();
     this.baseUrl = (config.baseUrl ?? "https://api.payark.com").replace(
-      /\/+$/,
+      TRAILING_SLASH_REGEX,
       "",
     );
     this.timeout = config.timeout ?? 30_000;
