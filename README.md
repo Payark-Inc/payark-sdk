@@ -1,6 +1,6 @@
 # @payark/sdk
 
-The official TypeScript SDK for the [PayArk](https://payark.com) payment gateway API.
+The official TypeScript SDK for the [PayArk](https://payark-public-demo.vercel.app/) payment gateway API.
 
 > **Zero dependencies** · **Type-safe** · **Retry-safe (idempotent)** · **Node 18+ / Bun / Deno**
 
