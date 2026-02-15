@@ -40,6 +40,9 @@ const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 /** Methods that mutate state and require idempotency protection. */
 const MUTATING_METHODS = new Set<HttpMethod>(["POST", "PUT", "PATCH"]);
 
+/** Regex to validate numeric Retry-After headers (seconds). */
+const RETRY_AFTER_REGEX = /^\d+$/;
+
 /**
  * Internal HTTP client used by every resource module.
  *
@@ -144,7 +147,7 @@ export class HttpClient {
         if (response.status === 429) {
           const retryHeader = response.headers.get("Retry-After");
           if (retryHeader) {
-            if (/^\d+$/.test(retryHeader)) {
+            if (RETRY_AFTER_REGEX.test(retryHeader)) {
               retryAfterMs = parseInt(retryHeader, 10) * 1000;
             } else {
               // Try parsing HTTP Date
