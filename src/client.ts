@@ -57,11 +57,12 @@ export class PayArk {
      *
      * @example
      * ```ts
-     * const isValid = await PayArk.webhooks.verify(
+     * const event = await PayArk.webhooks.constructEvent(
      *   rawBody,
      *   req.headers['x-payark-signature'],
      *   process.env.PAYARK_WEBHOOK_SECRET!,
      * );
+     * console.log(event.type);
      * ```
      */
     static readonly webhooks = new WebhooksResource();
