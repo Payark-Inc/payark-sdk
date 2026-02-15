@@ -1,5 +1,5 @@
 {
-    "name": "@payark/sdk",
+    "name": "@payark/sdk-internal",
     "version": "0.1.0",
     "description": "Official TypeScript SDK for the PayArk payment gateway API.",
     "main": "dist/index.js",
