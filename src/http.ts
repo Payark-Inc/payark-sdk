@@ -13,7 +13,7 @@
 // higher-level PayArk client class.
 // ---------------------------------------------------------------------------
 
-import { PayArkError } from "./errors";
+import { PayArkError, PayArkConnectionError } from "./errors";
 import type { PayArkConfig, PayArkErrorBody } from "./types";
 
 /** SDK version – injected at build time for User-Agent header. */
@@ -262,7 +262,7 @@ export class HttpClient {
     return headers;
   }
 
-  /** Generate a unique idempotency key (UUID v4-like without crypto dep). */
+  /** Generate a unique idempotency key using cryptographically secure randomness. */
   private generateIdempotencyKey(): string {
     // Use crypto.randomUUID if available (Node 19+, all modern browsers, Bun)
     if (
@@ -271,8 +271,10 @@ export class HttpClient {
     ) {
       return crypto.randomUUID();
     }
-    // Fallback: timestamp + random hex (sufficient for idempotency, not crypto)
-    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+
+    throw new PayArkConnectionError(
+      "Secure random number generation is not available. Ensure your environment supports crypto.randomUUID().",
+    );
   }
 
   /** Promise-based sleep utility. */
