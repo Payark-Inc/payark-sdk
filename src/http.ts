@@ -67,7 +67,7 @@ export class HttpClient {
 
     this.apiKey = config.apiKey.trim();
     this.baseUrl = (config.baseUrl ?? "https://api.payark.com").replace(
-      /\/+$/,
+      TRAILING_SLASH_REGEX,
       "",
     );
     this.timeout = config.timeout ?? 30_000;

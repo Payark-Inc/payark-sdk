@@ -26,6 +26,9 @@ import type { WebhookEvent } from "../types";
 /** Default tolerance: 5 minutes (300 seconds). */
 const DEFAULT_TOLERANCE_SECONDS = 300;
 
+/** Shared TextEncoder instance to avoid repeated instantiation. */
+const encoder = new TextEncoder();
+
 /** Parsed signature header components. */
 interface ParsedSignature {
   timestamp: number;
@@ -167,7 +170,6 @@ export class WebhooksResource {
 
   /** HMAC-SHA256 → lowercase hex. Works in Node 18+, Bun, Deno, CF Workers. */
   private async hmacSHA256Hex(data: string, secret: string): Promise<string> {
-    const encoder = new TextEncoder();
     const keyData = encoder.encode(secret);
     const msgData = encoder.encode(data);
 
