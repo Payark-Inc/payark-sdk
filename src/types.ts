@@ -78,6 +78,8 @@ export interface ListPaymentsParams {
   limit?: number;
   /** Offset for pagination. Default `0`. */
   offset?: number;
+  /** Optional project ID to filter results (required if using Personal Access Token). */
+  projectId?: string;
 }
 
 // ── Client Config ──────────────────────────────────────────────────────────
