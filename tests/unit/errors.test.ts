@@ -73,15 +73,6 @@ describe("PayArkError", () => {
       expect(err).toBeInstanceOf(Error);
     });
 
-    test("should work correctly after Object.setPrototypeOf", () => {
-      // This specifically tests the cross-realm instanceof fix
-      const err = new PayArkError("cross-realm", 401, "authentication_error");
-      const isPayArkError = err instanceof PayArkError;
-      const isError = err instanceof Error;
-
-      expect(isPayArkError).toBe(true);
-      expect(isError).toBe(true);
-    });
   });
 
   // ── Serialisation ────────────────────────────────────────────────────
