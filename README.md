@@ -261,6 +261,66 @@ tests/
     └── sdk.test.ts          – End-to-end workflows (checkout → payment → recovery)
 ```
 
+## Effect API 🚀
+
+For users of the **[Effect](https://effect.website/)** ecosystem, the SDK exposes a fully functional, type-safe API under the `payark.effect` namespace.
+
+This API provides:
+
+- **Runtime Validation**: All responses are validated against Schema definitions (e.g., `CheckoutSessionSchema`, `PaymentSchema`).
+- **Typed Errors**: Errors are typed as `PayArkEffectError` (a TaggedError), making them catchable via `Effect.catchTag`.
+- **Dependency Injection**: Automatically injects configuration into the Effect context.
+
+### Usage
+
+```ts
+import { Effect } from "effect";
+import { PayArk } from "@payark/sdk";
+
+const payark = new PayArk({ apiKey: "sk_test_..." });
+
+// Create a program description (lazy execution)
+const program = payark.effect.checkout.create({
+  amount: 1000,
+  provider: "esewa",
+  returnUrl: "https://example.com/success",
+});
+
+// Run the program
+const session = await Effect.runPromise(program);
+console.log(session.checkout_url);
+```
+
+### Functional Error Handling
+
+```ts
+import { Effect, Console } from "effect";
+
+const safeProgram = program.pipe(
+  Effect.catchTag("PayArkEffectError", (err) =>
+    Console.error(`PayArk Error: ${err.message} (Code: ${err.code})`),
+  ),
+  Effect.catchAll((err) => Console.error("Unknown error:", err)),
+);
+```
+
+### Retries & Resilience
+
+Since the return type is a standard `Effect`, you can use native resilience operators:
+
+```ts
+import { Effect, Schedule } from "effect";
+
+const robustProgram = program.pipe(
+  // Retry up to 3 times with exponential backoff on failure
+  Effect.retry(
+    Schedule.exponential(1000).pipe(Schedule.intersect(Schedule.recurs(3))),
+  ),
+  // Timeout after 5 seconds
+  Effect.timeout("5 seconds"),
+);
+```
+
 ## License
 
 MIT

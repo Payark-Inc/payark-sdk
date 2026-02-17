@@ -61,3 +61,8 @@ This document outlines the strategy for integrating the [Effect](https://effect.
 - [x] Plan Created
 - [x] `effect` package added to `packages/sdk/package.json`
 - [x] Implementation Strategy Finalized
+- [x] Infrastructure (Errors, HTTP Client, Config Service)
+- [x] Schema Definitions (Checkout, Payment, Project, Paginated)
+- [x] Resource Implementation (Checkout, Payments, Projects)
+- [x] Verification (Unit & High-Level Tests)
+- [x] Documentation (README)
