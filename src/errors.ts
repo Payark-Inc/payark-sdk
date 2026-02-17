@@ -42,6 +42,8 @@ export class PayArkError extends Error {
     this.code = code;
     this.raw = raw;
 
+    // Required for `instanceof` to work correctly when compiled to ES5
+    Object.setPrototypeOf(this, PayArkError.prototype);
     if (Error.captureStackTrace) {
       Error.captureStackTrace(this, PayArkError);
     }
@@ -103,6 +105,7 @@ export class PayArkAuthenticationError extends PayArkError {
   constructor(message: string, raw?: PayArkErrorBody) {
     super(message, 401, "authentication_error", raw);
     this.name = "PayArkAuthenticationError";
+    Object.setPrototypeOf(this, PayArkAuthenticationError.prototype);
   }
 }
 
@@ -111,6 +114,7 @@ export class PayArkPermissionError extends PayArkError {
   constructor(message: string, raw?: PayArkErrorBody) {
     super(message, 403, "permission_error", raw);
     this.name = "PayArkPermissionError";
+    Object.setPrototypeOf(this, PayArkPermissionError.prototype);
   }
 }
 
@@ -119,6 +123,7 @@ export class PayArkInvalidRequestError extends PayArkError {
   constructor(message: string, statusCode: number, raw?: PayArkErrorBody) {
     super(message, statusCode, "invalid_request_error", raw);
     this.name = "PayArkInvalidRequestError";
+    Object.setPrototypeOf(this, PayArkInvalidRequestError.prototype);
   }
 }
 
@@ -127,6 +132,7 @@ export class PayArkNotFoundError extends PayArkError {
   constructor(message: string, raw?: PayArkErrorBody) {
     super(message, 404, "not_found_error", raw);
     this.name = "PayArkNotFoundError";
+    Object.setPrototypeOf(this, PayArkNotFoundError.prototype);
   }
 }
 
@@ -135,6 +141,7 @@ export class PayArkRateLimitError extends PayArkError {
   constructor(message: string, raw?: PayArkErrorBody) {
     super(message, 429, "rate_limit_error", raw);
     this.name = "PayArkRateLimitError";
+    Object.setPrototypeOf(this, PayArkRateLimitError.prototype);
   }
 }
 
@@ -143,6 +150,7 @@ export class PayArkAPIError extends PayArkError {
   constructor(message: string, statusCode: number, raw?: PayArkErrorBody) {
     super(message, statusCode, "api_error", raw);
     this.name = "PayArkAPIError";
+    Object.setPrototypeOf(this, PayArkAPIError.prototype);
   }
 }
 
@@ -151,6 +159,7 @@ export class PayArkConnectionError extends PayArkError {
   constructor(message: string) {
     super(message, 0, "connection_error");
     this.name = "PayArkConnectionError";
+    Object.setPrototypeOf(this, PayArkConnectionError.prototype);
   }
 }
 
@@ -159,5 +168,6 @@ export class PayArkSignatureVerificationError extends PayArkError {
   constructor(message: string) {
     super(message, 400, "invalid_request_error");
     this.name = "PayArkSignatureVerificationError";
+    Object.setPrototypeOf(this, PayArkSignatureVerificationError.prototype);
   }
 }

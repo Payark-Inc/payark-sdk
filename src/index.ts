@@ -35,6 +35,8 @@ export type {
   ListPaymentsParams,
   PaginatedResponse,
   PaginationMeta,
+  // Project
+  Project,
   // Provider
   Provider,
   // Webhooks

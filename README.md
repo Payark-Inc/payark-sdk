@@ -1,6 +1,6 @@
 # @payark/sdk
 
-The official TypeScript SDK for the [PayArk](https://payark-public-demo.vercel.app/) payment gateway API.
+The official TypeScript SDK for the [PayArk](https://payark.com) payment gateway API.
 
 > **Zero dependencies** · **Type-safe** · **Retry-safe (idempotent)** · **Node 18+ / Bun / Deno**
 
@@ -260,6 +260,23 @@ tests/
 └── integration/
     └── sdk.test.ts          – End-to-end workflows (checkout → payment → recovery)
 ```
+
+## Effect API 🚀
+
+For users of the **[Effect](https://effect.website/)** ecosystem, we provide a dedicated package **[@payark/sdk-effect](https://www.npmjs.com/package/@payark/sdk-effect)**.
+
+This package offers a fully functional, type-safe API with:
+
+- **Zero Promise overhead**: Uses `@effect/platform/HttpClient` natively.
+- **Runtime Validation**: Validates all responses using `@effect/schema`.
+- **Typed Errors**: Tagged errors for clean matching.
+- **Observability**: Built-in support for Effect's tracing and spans.
+
+```bash
+bun add @payark/sdk-effect
+```
+
+See the [@payark/sdk-effect documentation](../sdk-effect/README.md) for more details.
 
 ## License
 
