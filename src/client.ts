@@ -15,6 +15,7 @@ import { CheckoutResource } from "./resources/checkout";
 import { PaymentsResource } from "./resources/payments";
 import { WebhooksResource } from "./resources/webhooks";
 import { Projects } from "./resources/projects";
+import { PayArkEffect } from "./effect";
 import type { PayArkConfig } from "./types";
 
 /**
@@ -71,6 +72,7 @@ export class PayArk {
   private _checkout?: CheckoutResource;
   private _payments?: PaymentsResource;
   private _projects?: Projects;
+  private _effect?: PayArkEffect;
 
   /**
    * Create a new PayArk client.
@@ -132,5 +134,25 @@ export class PayArk {
       this._projects = new Projects(this.http);
     }
     return this._projects;
+  }
+
+  /**
+   * Effect-based API.
+   *
+   * Provides a functional, type-safe API powered by the Effect ecosystem.
+   *
+   * @example
+   * ```ts
+   * import { Effect } from 'effect';
+   *
+   * const program = payark.effect.checkout.create({ ... });
+   * Effect.runPromise(program);
+   * ```
+   */
+  get effect(): PayArkEffect {
+    if (!this._effect) {
+      this._effect = new PayArkEffect();
+    }
+    return this._effect;
   }
 }
