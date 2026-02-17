@@ -1,6 +1,7 @@
 import { Effect, Context } from "effect";
 import { HttpClient, HttpClientRequest } from "@effect/platform";
 import { PayArkEffectError } from "./errors";
+import { SDK_VERSION } from "../index";
 import type { PayArkConfig } from "../types";
 
 /**
@@ -49,7 +50,7 @@ export const request = <T>(
       Authorization: `Bearer ${config.apiKey}`,
       "Content-Type": "application/json",
       Accept: "application/json",
-      "User-Agent": `payark-sdk-effect/0.1.0`,
+      "User-Agent": `payark-sdk-effect/${SDK_VERSION}`,
       ...options?.headers,
     };
 

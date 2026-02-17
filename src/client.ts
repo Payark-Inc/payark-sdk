@@ -50,6 +50,7 @@ import type { PayArkConfig } from "./types";
 export class PayArk {
   /** Internal HTTP transport – shared across all resources. */
   private readonly http: HttpClient;
+  private readonly config: PayArkConfig;
 
   /**
    * Static webhook verification utility.
@@ -94,6 +95,7 @@ export class PayArk {
    * ```
    */
   constructor(config: PayArkConfig) {
+    this.config = config;
     this.http = new HttpClient(config);
   }
 
@@ -151,7 +153,7 @@ export class PayArk {
    */
   get effect(): PayArkEffect {
     if (!this._effect) {
-      this._effect = new PayArkEffect();
+      this._effect = new PayArkEffect(this.config);
     }
     return this._effect;
   }

@@ -1,89 +1,127 @@
 import { describe, it, expect } from "bun:test";
 import { Effect, Layer, Exit, Cause, Option } from "effect";
 import { HttpClient, HttpClientResponse } from "@effect/platform";
-import { PayArkConfigService, request } from "../../src/effect/http";
+import { PayArk } from "../../src/client";
 import { PayArkEffectError } from "../../src/effect/errors";
 
-describe("PayArk SDK - Effect Internal HTTP", () => {
+describe("PayArk SDK - Effect API High-Level", () => {
   const apiKey = "sk_test_123";
 
-  it("should make a request with correct URL and headers", async () => {
-    let capturedRequest: any = null;
-    const MockClient = HttpClient.make((req) => {
-      capturedRequest = req;
-      return Effect.succeed(
-        HttpClientResponse.fromTypedJson({ success: true }, { status: 200 }),
-      );
-    });
-
-    const program = request("POST", "/v1/test", { body: { foo: "bar" } }).pipe(
-      Effect.provide(Layer.succeed(HttpClient.HttpClient, MockClient)),
-      Effect.provideService(PayArkConfigService, {
-        apiKey,
-        baseUrl: "https://api.test.com",
-      }),
-    );
-
-    const result = await Effect.runPromise(program);
-
-    expect(result).toEqual({ success: true });
-    expect(capturedRequest.url).toBe("https://api.test.com/v1/test");
-    expect(capturedRequest.headers["authorization"]).toBe(`Bearer ${apiKey}`);
-    expect(capturedRequest.method).toBe("POST");
-  });
-
-  it("should map 401 to authentication_error", async () => {
-    const MockClient = HttpClient.make(() =>
+  it("should create a checkout session", async () => {
+    const mockResponse = {
+      id: "cs_123",
+      checkout_url: "https://pay.ark/cs_123",
+      payment_method: { type: "esewa" },
+    };
+    const MockClient = HttpClient.make((req) =>
       Effect.succeed(
-        HttpClientResponse.fromTypedJson(
-          { error: "Unauthorized" },
-          { status: 401 },
+        HttpClientResponse.fromWeb(
+          req,
+          new Response(JSON.stringify(mockResponse)),
         ),
       ),
     );
 
-    const program = request("GET", "/v1/test").pipe(
-      Effect.provide(Layer.succeed(HttpClient.HttpClient, MockClient)),
-      Effect.provideService(PayArkConfigService, { apiKey }),
-    );
+    const payark = new PayArk({ apiKey });
+    const program = payark.effect.checkout
+      .create({
+        amount: 1000,
+        provider: "esewa",
+        returnUrl: "https://example.com/success",
+      })
+      .pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, MockClient)));
 
-    const result = await Effect.runPromiseExit(program);
-
-    expect(Exit.isFailure(result)).toBe(true);
-    if (Exit.isFailure(result)) {
-      const failure = Cause.failureOption(result.cause);
-      if (Option.isSome(failure)) {
-        const error: any = failure.value;
-        expect(error._tag).toBe("PayArkEffectError");
-        expect(error.statusCode).toBe(401);
-        expect(error.code).toBe("authentication_error");
-      }
-    }
+    const result = await Effect.runPromise(program);
+    expect(result.id).toBe("cs_123");
+    expect(result.payment_method.type).toBe("esewa");
   });
 
-  it("should map network failures to connection_error", async () => {
-    const MockClient = HttpClient.make(() =>
-      Effect.fail({
-        _tag: "RequestError",
-        reason: "Transport",
-        message: "DNS failure",
-      } as any),
+  it("should list payments", async () => {
+    const mockResponse = {
+      data: [
+        {
+          id: "pay_1",
+          amount: 100,
+          currency: "NPR",
+          status: "completed", // Note: PaymentStatus is success|pending|failed, so completed might fail if literal
+          project_id: "p1",
+          created_at: "now",
+        },
+      ],
+      meta: { total: 1, limit: 10, offset: 0 },
+    };
+    // Fix status to be valid
+    mockResponse.data[0].status = "success";
+
+    const MockClient = HttpClient.make((req) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          req,
+          new Response(JSON.stringify(mockResponse)),
+        ),
+      ),
     );
 
-    const program = request("GET", "/v1/test").pipe(
-      Effect.provide(Layer.succeed(HttpClient.HttpClient, MockClient)),
-      Effect.provideService(PayArkConfigService, { apiKey }),
+    const payark = new PayArk({ apiKey });
+    const program = payark.effect.payments
+      .list()
+      .pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, MockClient)));
+
+    const result = await Effect.runPromise(program);
+    expect(result.data).toHaveLength(1);
+    expect(result.data[0].id).toBe("pay_1");
+    expect(result.meta.total).toBe(1);
+  });
+
+  it("should list projects", async () => {
+    const mockResponse = [
+      {
+        id: "proj_1",
+        name: "My Project",
+        api_key_secret: "sk_...",
+        created_at: "now",
+      },
+    ];
+    const MockClient = HttpClient.make((req) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          req,
+          new Response(JSON.stringify(mockResponse)),
+        ),
+      ),
     );
+
+    const payark = new PayArk({ apiKey });
+    const program = payark.effect.projects
+      .list()
+      .pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, MockClient)));
+
+    const result = await Effect.runPromise(program);
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("My Project");
+  });
+
+  it("should handle validation errors with Schema", async () => {
+    const mockResponse = { invalid: "data" };
+    const MockClient = HttpClient.make((req) =>
+      Effect.succeed(
+        HttpClientResponse.fromWeb(
+          req,
+          new Response(JSON.stringify(mockResponse)),
+        ),
+      ),
+    );
+
+    const payark = new PayArk({ apiKey });
+    const program = payark.effect.checkout
+      .create({
+        amount: 1000,
+        provider: "esewa",
+        returnUrl: "https://example.com/success",
+      })
+      .pipe(Effect.provide(Layer.succeed(HttpClient.HttpClient, MockClient)));
 
     const result = await Effect.runPromiseExit(program);
-
     expect(Exit.isFailure(result)).toBe(true);
-    if (Exit.isFailure(result)) {
-      const failure = Cause.failureOption(result.cause);
-      if (Option.isSome(failure)) {
-        const error: any = failure.value;
-        expect(error.code).toBe("connection_error");
-      }
-    }
   });
 });

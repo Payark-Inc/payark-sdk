@@ -7,7 +7,13 @@
 
 // ── Provider enum ──────────────────────────────────────────────────────────
 /** Supported payment providers on the PayArk platform. */
-export type Provider = "esewa" | "khalti";
+export type Provider =
+  | "esewa"
+  | "khalti"
+  | "connectips"
+  | "imepay"
+  | "fonepay"
+  | "sandbox";
 
 // ── Checkout ───────────────────────────────────────────────────────────────
 /** Parameters required to create a new checkout session. */
