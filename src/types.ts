@@ -7,7 +7,13 @@
 
 // ── Provider enum ──────────────────────────────────────────────────────────
 /** Supported payment providers on the PayArk platform. */
-export type Provider = "esewa" | "khalti";
+export type Provider =
+  | "esewa"
+  | "khalti"
+  | "connectips"
+  | "imepay"
+  | "fonepay"
+  | "sandbox";
 
 // ── Checkout ───────────────────────────────────────────────────────────────
 /** Parameters required to create a new checkout session. */
@@ -29,15 +35,15 @@ export interface CreateCheckoutParams {
 /** Successful response from the checkout creation endpoint. */
 export interface CheckoutSession {
   /** Unique payment identifier (e.g. `"pay_abc123"`). */
-  id: string;
+  readonly id: string;
   /** The full URL of the hosted checkout page for the customer. */
-  checkout_url: string;
+  readonly checkout_url: string;
   /** Provider-specific payment method details. */
-  payment_method: {
-    type: Provider;
-    url?: string;
-    method?: "GET" | "POST";
-    fields?: Record<string, string>;
+  readonly payment_method: {
+    readonly type: Provider;
+    readonly url?: string;
+    readonly method?: "GET" | "POST";
+    readonly fields?: Record<string, string>;
   };
 }
 
@@ -47,29 +53,29 @@ export type PaymentStatus = "pending" | "success" | "failed";
 
 /** A payment record as returned by the API. */
 export interface Payment {
-  id: string;
-  project_id: string;
-  amount: number;
-  currency: string;
-  status: PaymentStatus;
-  provider_ref?: string | null;
-  metadata_json?: Record<string, unknown> | null;
-  gateway_response?: Record<string, unknown> | null;
-  created_at: string;
-  updated_at?: string;
+  readonly id: string;
+  readonly project_id: string;
+  readonly amount: number;
+  readonly currency: string;
+  readonly status: PaymentStatus;
+  readonly provider_ref?: string | null;
+  readonly metadata_json?: Record<string, unknown> | null;
+  readonly gateway_response?: Record<string, unknown> | null;
+  readonly created_at: string;
+  readonly updated_at?: string;
 }
 
 /** Pagination metadata returned alongside list queries. */
 export interface PaginationMeta {
-  total: number | null;
-  limit: number;
-  offset: number;
+  readonly total: number | null;
+  readonly limit: number;
+  readonly offset: number;
 }
 
 /** Paginated response wrapper for list endpoints. */
 export interface PaginatedResponse<T> {
-  data: T[];
-  meta: PaginationMeta;
+  readonly data: readonly T[];
+  readonly meta: PaginationMeta;
 }
 
 /** Query parameters for the list-payments endpoint. */
@@ -78,6 +84,17 @@ export interface ListPaymentsParams {
   limit?: number;
   /** Offset for pagination. Default `0`. */
   offset?: number;
+  /** Optional project ID to filter results (required if using Personal Access Token). */
+  projectId?: string;
+}
+
+// ── Project ───────────────────────────────────────────────────────────────
+/** A project record belonging to the authenticated account. */
+export interface Project {
+  readonly id: string;
+  readonly name: string;
+  readonly api_key_secret: string;
+  readonly created_at: string;
 }
 
 // ── Client Config ──────────────────────────────────────────────────────────

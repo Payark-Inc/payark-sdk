@@ -13,7 +13,7 @@
 // higher-level PayArk client class.
 // ---------------------------------------------------------------------------
 
-import { PayArkError, PayArkConnectionError } from "./errors";
+import { PayArkError } from "./errors";
 import type { PayArkConfig, PayArkErrorBody } from "./types";
 
 /** SDK version – injected at build time for User-Agent header. */
@@ -40,9 +40,6 @@ const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 /** Methods that mutate state and require idempotency protection. */
 const MUTATING_METHODS = new Set<HttpMethod>(["POST", "PUT", "PATCH"]);
 
-/** Regex to match trailing slashes for base URL normalization. */
-const TRAILING_SLASH_REGEX = /\/+$/;
-
 /**
  * Internal HTTP client used by every resource module.
  *
@@ -67,7 +64,7 @@ export class HttpClient {
 
     this.apiKey = config.apiKey.trim();
     this.baseUrl = (config.baseUrl ?? "https://api.payark.com").replace(
-      TRAILING_SLASH_REGEX,
+      /\/+$/,
       "",
     );
     this.timeout = config.timeout ?? 30_000;
@@ -262,7 +259,7 @@ export class HttpClient {
     return headers;
   }
 
-  /** Generate a unique idempotency key using cryptographically secure randomness. */
+  /** Generate a unique idempotency key (UUID v4-like without crypto dep). */
   private generateIdempotencyKey(): string {
     // Use crypto.randomUUID if available (Node 19+, all modern browsers, Bun)
     if (
@@ -271,10 +268,8 @@ export class HttpClient {
     ) {
       return crypto.randomUUID();
     }
-
-    throw new PayArkConnectionError(
-      "Secure random number generation is not available. Ensure your environment supports crypto.randomUUID().",
-    );
+    // Fallback: timestamp + random hex (sufficient for idempotency, not crypto)
+    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   }
 
   /** Promise-based sleep utility. */
