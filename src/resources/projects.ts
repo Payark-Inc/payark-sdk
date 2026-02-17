@@ -1,12 +1,6 @@
 import { HttpClient } from "../http";
-import { PaginatedResponse } from "../types";
 
-export interface Project {
-  id: string;
-  name: string;
-  api_key_secret: string;
-  created_at: string;
-}
+import { Project } from "../types";
 
 export class Projects {
   constructor(private readonly http: HttpClient) {}

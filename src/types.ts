@@ -88,6 +88,15 @@ export interface ListPaymentsParams {
   projectId?: string;
 }
 
+// ── Project ───────────────────────────────────────────────────────────────
+/** A project record belonging to the authenticated account. */
+export interface Project {
+  id: string;
+  name: string;
+  api_key_secret: string;
+  created_at: string;
+}
+
 // ── Client Config ──────────────────────────────────────────────────────────
 /** Configuration options for initialising the PayArk client. */
 export interface PayArkConfig {

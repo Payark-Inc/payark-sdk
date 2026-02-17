@@ -263,63 +263,20 @@ tests/
 
 ## Effect API 🚀
 
-For users of the **[Effect](https://effect.website/)** ecosystem, the SDK exposes a fully functional, type-safe API under the `payark.effect` namespace.
+For users of the **[Effect](https://effect.website/)** ecosystem, we provide a dedicated package **[@payark/sdk-effect](https://www.npmjs.com/package/@payark/sdk-effect)**.
 
-This API provides:
+This package offers a fully functional, type-safe API with:
 
-- **Runtime Validation**: All responses are validated against Schema definitions (e.g., `CheckoutSessionSchema`, `PaymentSchema`).
-- **Typed Errors**: Errors are typed as `PayArkEffectError` (a TaggedError), making them catchable via `Effect.catchTag`.
-- **Dependency Injection**: Automatically injects configuration into the Effect context.
+- **Zero Promise overhead**: Uses `@effect/platform/HttpClient` natively.
+- **Runtime Validation**: Validates all responses using `@effect/schema`.
+- **Typed Errors**: Tagged errors for clean matching.
+- **Observability**: Built-in support for Effect's tracing and spans.
 
-### Usage
-
-```ts
-import { Effect } from "effect";
-import { PayArk } from "@payark/sdk";
-
-const payark = new PayArk({ apiKey: "sk_test_..." });
-
-// Create a program description (lazy execution)
-const program = payark.effect.checkout.create({
-  amount: 1000,
-  provider: "esewa",
-  returnUrl: "https://example.com/success",
-});
-
-// Run the program
-const session = await Effect.runPromise(program);
-console.log(session.checkout_url);
+```bash
+bun add @payark/sdk-effect
 ```
 
-### Functional Error Handling
-
-```ts
-import { Effect, Console } from "effect";
-
-const safeProgram = program.pipe(
-  Effect.catchTag("PayArkEffectError", (err) =>
-    Console.error(`PayArk Error: ${err.message} (Code: ${err.code})`),
-  ),
-  Effect.catchAll((err) => Console.error("Unknown error:", err)),
-);
-```
-
-### Retries & Resilience
-
-Since the return type is a standard `Effect`, you can use native resilience operators:
-
-```ts
-import { Effect, Schedule } from "effect";
-
-const robustProgram = program.pipe(
-  // Retry up to 3 times with exponential backoff on failure
-  Effect.retry(
-    Schedule.exponential(1000).pipe(Schedule.intersect(Schedule.recurs(3))),
-  ),
-  // Timeout after 5 seconds
-  Effect.timeout("5 seconds"),
-);
-```
+See the [@payark/sdk-effect documentation](../sdk-effect/README.md) for more details.
 
 ## License
 
