@@ -39,6 +39,11 @@ export type {
   Project,
   // Provider
   Provider,
+  // Customers
+  Customer,
+  CreateCustomerParams,
+  UpdateCustomerParams,
+  ListCustomersParams,
   // Webhooks
   WebhookEvent,
   WebhookEventType,

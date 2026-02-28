@@ -121,6 +121,14 @@ export interface ListCustomersParams {
   projectId?: string;
 }
 
+/** Parameters to update an existing customer. */
+export interface UpdateCustomerParams {
+  email?: string;
+  name?: string;
+  phone?: string;
+  metadata?: Record<string, unknown>;
+}
+
 // ── Subscriptions ──────────────────────────────────────────────────────────
 
 export type SubscriptionStatus = "active" | "past_due" | "canceled" | "paused";

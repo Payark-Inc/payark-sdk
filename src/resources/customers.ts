@@ -7,6 +7,7 @@
 import type { HttpClient } from "../http";
 import type {
   CreateCustomerParams,
+  UpdateCustomerParams,
   Customer,
   ListCustomersParams,
   PaginatedResponse,
@@ -60,6 +61,36 @@ export class CustomersResource {
           email: params.email,
         },
       },
+    );
+  }
+
+  /**
+   * Update a customer's mutable fields.
+   *
+   * @param id - The customer identifier (e.g., `cus_...`).
+   * @param params - Fields to update (email, name, phone, metadata).
+   * @returns The updated customer object.
+   */
+  async update(id: string, params: UpdateCustomerParams): Promise<Customer> {
+    return this.http.request<Customer>(
+      "PATCH",
+      `/v1/customers/${encodeURIComponent(id)}`,
+      { body: params },
+    );
+  }
+
+  /**
+   * Delete a customer.
+   *
+   * Customers with active subscriptions cannot be deleted (409 Conflict).
+   * Cancel all subscriptions before deleting the customer.
+   *
+   * @param id - The customer identifier (e.g., `cus_...`).
+   */
+  async delete(id: string): Promise<void> {
+    await this.http.request<void>(
+      "DELETE",
+      `/v1/customers/${encodeURIComponent(id)}`,
     );
   }
 }
