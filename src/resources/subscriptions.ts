@@ -11,6 +11,10 @@ import type {
   ListSubscriptionsParams,
   PaginatedResponse,
 } from "../types";
+import {
+  createAutoPaginatingList,
+  type AutoPaginatingList,
+} from "../pagination";
 
 export class SubscriptionsResource {
   constructor(private readonly http: HttpClient) {}
@@ -40,27 +44,40 @@ export class SubscriptionsResource {
   }
 
   /**
-   * List subscriptions.
+   * List subscriptions with auto-pagination support.
    *
    * @param params - Filtering and pagination parameters.
-   * @returns Paginated list of subscriptions.
+   * @returns An auto-paginating list of subscriptions.
+   *
+   * @example
+   * ```ts
+   * for await (const sub of payark.subscriptions.list({ status: 'active' })) {
+   *   console.log(sub.id, sub.amount);
+   * }
+   * ```
    */
   async list(
     params: ListSubscriptionsParams = {},
-  ): Promise<PaginatedResponse<Subscription>> {
-    return this.http.request<PaginatedResponse<Subscription>>(
-      "GET",
-      "/v1/subscriptions",
-      {
-        query: {
-          limit: params.limit,
-          offset: params.offset,
-          projectId: params.projectId,
-          customerId: params.customerId,
-          status: params.status,
+  ): Promise<AutoPaginatingList<Subscription>> {
+    const limit = params.limit ?? 100;
+
+    const fetchPage = (offset: number) =>
+      this.http.request<PaginatedResponse<Subscription>>(
+        "GET",
+        "/v1/subscriptions",
+        {
+          query: {
+            limit,
+            offset,
+            projectId: params.projectId,
+            customerId: params.customerId,
+            status: params.status,
+          },
         },
-      },
-    );
+      );
+
+    const firstPage = await fetchPage(params.offset ?? 0);
+    return createAutoPaginatingList(firstPage, fetchPage, limit);
   }
 
   /**

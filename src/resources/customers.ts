@@ -12,6 +12,10 @@ import type {
   ListCustomersParams,
   PaginatedResponse,
 } from "../types";
+import {
+  createAutoPaginatingList,
+  type AutoPaginatingList,
+} from "../pagination";
 
 export class CustomersResource {
   constructor(private readonly http: HttpClient) {}
@@ -42,26 +46,36 @@ export class CustomersResource {
   }
 
   /**
-   * List customers.
+   * List customers with auto-pagination support.
    *
    * @param params - Filtering and pagination parameters.
-   * @returns Paginated list of customers.
+   * @returns An auto-paginating list of customers.
+   *
+   * @example
+   * ```ts
+   * // Auto-paginate through all customers
+   * for await (const customer of payark.customers.list()) {
+   *   console.log(customer.email);
+   * }
+   * ```
    */
   async list(
     params: ListCustomersParams = {},
-  ): Promise<PaginatedResponse<Customer>> {
-    return this.http.request<PaginatedResponse<Customer>>(
-      "GET",
-      "/v1/customers",
-      {
+  ): Promise<AutoPaginatingList<Customer>> {
+    const limit = params.limit ?? 100;
+
+    const fetchPage = (offset: number) =>
+      this.http.request<PaginatedResponse<Customer>>("GET", "/v1/customers", {
         query: {
-          limit: params.limit,
-          offset: params.offset,
+          limit,
+          offset,
           projectId: params.projectId,
           email: params.email,
         },
-      },
-    );
+      });
+
+    const firstPage = await fetchPage(params.offset ?? 0);
+    return createAutoPaginatingList(firstPage, fetchPage, limit);
   }
 
   /**

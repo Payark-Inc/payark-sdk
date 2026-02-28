@@ -51,6 +51,9 @@ export type {
   PayArkErrorBody,
 } from "./types";
 
+// ── Pagination ────────────────────────────────────────────────────────────
+export type { AutoPaginatingList } from "./pagination";
+
 // ── Version ────────────────────────────────────────────────────────────────
 /** SDK version string for runtime introspection. */
 export const SDK_VERSION = "0.1.0" as const;
