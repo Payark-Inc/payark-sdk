@@ -39,12 +39,20 @@ export type {
   Project,
   // Provider
   Provider,
+  // Customers
+  Customer,
+  CreateCustomerParams,
+  UpdateCustomerParams,
+  ListCustomersParams,
   // Webhooks
   WebhookEvent,
   WebhookEventType,
   // Error body
   PayArkErrorBody,
 } from "./types";
+
+// ── Pagination ────────────────────────────────────────────────────────────
+export type { AutoPaginatingList } from "./pagination";
 
 // ── Version ────────────────────────────────────────────────────────────────
 /** SDK version string for runtime introspection. */

@@ -15,6 +15,8 @@ import { CheckoutResource } from "./resources/checkout";
 import { PaymentsResource } from "./resources/payments";
 import { WebhooksResource } from "./resources/webhooks";
 import { Projects } from "./resources/projects";
+import { CustomersResource } from "./resources/customers";
+import { SubscriptionsResource } from "./resources/subscriptions";
 import type { PayArkConfig } from "./types";
 
 /**
@@ -59,7 +61,7 @@ export class PayArk {
    *
    * @example
    * ```ts
-   * const isValid = await PayArk.webhooks.verify(
+   * const event = await PayArk.webhooks.constructEvent(
    *   rawBody,
    *   req.headers['x-payark-signature'],
    *   process.env.PAYARK_WEBHOOK_SECRET!,
@@ -72,6 +74,8 @@ export class PayArk {
   private _checkout?: CheckoutResource;
   private _payments?: PaymentsResource;
   private _projects?: Projects;
+  private _customers?: CustomersResource;
+  private _subscriptions?: SubscriptionsResource;
 
   /**
    * Create a new PayArk client.
@@ -122,6 +126,30 @@ export class PayArk {
       this._payments = new PaymentsResource(this.http);
     }
     return this._payments;
+  }
+
+  /**
+   * Customers resource.
+   *
+   * Create and manage customer identities.
+   */
+  get customers(): CustomersResource {
+    if (!this._customers) {
+      this._customers = new CustomersResource(this.http);
+    }
+    return this._customers;
+  }
+
+  /**
+   * Subscriptions resource.
+   *
+   * Manage recurring billing subscriptions.
+   */
+  get subscriptions(): SubscriptionsResource {
+    if (!this._subscriptions) {
+      this._subscriptions = new SubscriptionsResource(this.http);
+    }
+    return this._subscriptions;
   }
 
   /**

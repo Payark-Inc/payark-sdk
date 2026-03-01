@@ -10,7 +10,7 @@
 //   ```ts
 //   import { PayArk } from '@payark/sdk';
 //
-//   const isValid = await PayArk.webhooks.verify(
+//   const event = await PayArk.webhooks.constructEvent(
 //     rawBody,                            // The raw request body string
 //     request.headers['x-payark-signature'], // The signature header
 //     'whsec_...',                        // Your webhook secret
@@ -75,28 +75,6 @@ export class WebhooksResource {
     return JSON.parse(rawBody) as WebhookEvent;
   }
 
-  /**
-   * @deprecated Use `constructEvent` instead.
-   */
-  async verify(
-    rawBody: string,
-    signatureHeader: string,
-    secret: string,
-    toleranceSeconds: number = DEFAULT_TOLERANCE_SECONDS,
-  ): Promise<boolean> {
-    try {
-      await this.verifySignature(
-        rawBody,
-        signatureHeader,
-        secret,
-        toleranceSeconds,
-      );
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
   /** Helper to perform the actual verification check. */
   private async verifySignature(
     rawBody: string,
@@ -134,7 +112,7 @@ export class WebhooksResource {
      * Parse the `X-PayArk-Signature` header into its components.
      *
      * Useful if you want to inspect the timestamp or signature
-     * separately before calling `verify()`.
+     * separately before calling `constructEvent()`.
      *
      * @param header - The raw `X-PayArk-Signature` header value.
 

@@ -88,6 +88,90 @@ export interface ListPaymentsParams {
   projectId?: string;
 }
 
+// ── Customers ──────────────────────────────────────────────────────────────
+
+/** A customer identity in the merchant system. */
+export interface Customer {
+  id: string;
+  merchant_customer_id: string;
+  email?: string | null;
+  name?: string | null;
+  phone?: string | null;
+  project_id: string;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+/** Parameters to create a new customer. */
+export interface CreateCustomerParams {
+  merchant_customer_id: string;
+  email?: string;
+  name?: string;
+  phone?: string;
+  project_id?: string;
+  metadata?: Record<string, unknown>;
+}
+
+/** Parameters to list customers. */
+export interface ListCustomersParams {
+  limit?: number;
+  offset?: number;
+  email?: string;
+  projectId?: string;
+}
+
+/** Parameters to update an existing customer. */
+export interface UpdateCustomerParams {
+  email?: string;
+  name?: string;
+  phone?: string;
+  metadata?: Record<string, unknown>;
+}
+
+// ── Subscriptions ──────────────────────────────────────────────────────────
+
+export type SubscriptionStatus = "active" | "past_due" | "canceled" | "paused";
+export type SubscriptionInterval = "month" | "year" | "week";
+
+export interface Subscription {
+  id: string;
+  project_id: string;
+  customer_id: string;
+  status: SubscriptionStatus;
+  amount: number;
+  currency: string;
+  interval: SubscriptionInterval;
+  interval_count: number;
+  current_period_start: string;
+  current_period_end: string;
+  payment_link: string;
+  auto_send_link: boolean;
+  metadata?: Record<string, unknown> | null;
+  canceled_at?: string | null;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface CreateSubscriptionParams {
+  customer_id: string;
+  amount: number;
+  currency?: string;
+  interval: SubscriptionInterval;
+  interval_count?: number;
+  project_id?: string;
+  auto_send_link?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ListSubscriptionsParams {
+  limit?: number;
+  offset?: number;
+  projectId?: string;
+  customerId?: string;
+  status?: SubscriptionStatus;
+}
+
 // ── Project ───────────────────────────────────────────────────────────────
 /** A project record belonging to the authenticated account. */
 export interface Project {
@@ -140,7 +224,14 @@ export interface PayArkErrorBody {
 
 // ── Webhooks ───────────────────────────────────────────────────────────────
 /** Valid webhook event types. */
-export type WebhookEventType = "payment.success" | "payment.failed";
+export type WebhookEventType =
+  | "payment.success"
+  | "payment.failed"
+  | "subscription.created"
+  | "subscription.payment_succeeded"
+  | "subscription.payment_failed"
+  | "subscription.renewal_due"
+  | "subscription.canceled";
 
 /** Shape of a webhook event sent to your server. */
 export interface WebhookEvent {
@@ -149,14 +240,18 @@ export interface WebhookEvent {
   /** Unique ID for this event occurrence. */
   id?: string;
   /** The resource object that triggered the event. */
-  data: {
-    id: string;
-    amount: number;
-    currency: string;
-    status: string;
-    metadata?: Record<string, unknown>;
-    [key: string]: unknown;
-  };
+  data:
+    | Payment
+    | Subscription
+    | Customer
+    | {
+        id: string;
+        amount?: number;
+        currency?: string;
+        status: string;
+        metadata?: Record<string, unknown>;
+        [key: string]: unknown;
+      };
   /** Whether this is a test mode event. */
   is_test: boolean;
   /** Timestamp when the event was created. */
