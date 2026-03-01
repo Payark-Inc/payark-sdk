@@ -130,6 +130,30 @@ export class HttpClient {
           Effect.flatMap((req) => Http.execute(req)),
           Effect.flatMap(HttpResponse.filterStatusOk),
           Effect.timeout(timeout),
+          Effect.catchAll((err: any) => {
+            if (
+              err &&
+              typeof err === "object" &&
+              "_tag" in err &&
+              err._tag === "ResponseError"
+            ) {
+              const retryAfterOption = Headers.get(
+                err.response.headers,
+                "retry-after",
+              );
+              if (Option.isSome(retryAfterOption)) {
+                const retryAfter = retryAfterOption.value;
+                const seconds = parseInt(retryAfter, 10);
+                if (!isNaN(seconds)) {
+                  // We sleep before failing, so that the next retry runs later
+                  return Effect.sleep(Duration.seconds(seconds)).pipe(
+                    Effect.flatMap(() => Effect.fail(err)),
+                  );
+                }
+              }
+            }
+            return Effect.fail(err);
+          }),
           // Retry logic: Exponential backoff with jitter + respect Retry-After
           Effect.retry(
             Schedule.exponential("500 millis").pipe(
@@ -148,34 +172,6 @@ export class HttpClient {
               }),
               // Limit retries
               Schedule.intersect(Schedule.recurs(this.maxRetries)),
-              // Add delay from Retry-After if present
-              Schedule.addDelay((_, err: any) => {
-                console.log("DEBUG: err", err);
-                let extraDelay = Duration.zero;
-                if (
-                  err &&
-                  typeof err === "object" &&
-                  "_tag" in err &&
-                  err._tag === "ResponseError"
-                ) {
-                  console.log(
-                    "DEBUG: err.response.headers",
-                    err.response.headers,
-                  );
-                  const retryAfterOption = Headers.get(
-                    err.response.headers,
-                    "retry-after",
-                  );
-                  if (Option.isSome(retryAfterOption)) {
-                    const retryAfter = retryAfterOption.value;
-                    const seconds = parseInt(retryAfter, 10);
-                    if (!isNaN(seconds)) {
-                      extraDelay = Duration.seconds(seconds);
-                    }
-                  }
-                }
-                return extraDelay;
-              }),
             ),
           ),
           Effect.catchAll((err: any) => {

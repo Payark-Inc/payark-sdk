@@ -21,6 +21,18 @@ function fetchMock(): { mock: { calls: any[][] } } {
   return globalThis.fetch as any;
 }
 
+function getBody(opts: any) {
+  const body = opts.body;
+  if (!body) return body;
+  if (
+    body instanceof Uint8Array ||
+    (typeof Buffer !== "undefined" && Buffer.isBuffer(body))
+  ) {
+    return new TextDecoder().decode(body);
+  }
+  return body;
+}
+
 function mockResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -75,7 +87,7 @@ describe("CustomersResource", () => {
       expect(url.toString()).toContain("/v1/customers");
       expect(opts.method).toBe("POST");
 
-      const body = JSON.parse(opts.body);
+      const body = JSON.parse(getBody(opts));
       expect(body.merchant_customer_id).toBe("usr_42");
       expect(body.email).toBe("test@example.com");
     });
@@ -125,7 +137,7 @@ describe("CustomersResource", () => {
       expect(url.toString()).toContain("/v1/customers/cus_abc123");
       expect(opts.method).toBe("PATCH");
 
-      const body = JSON.parse(opts.body);
+      const body = JSON.parse(getBody(opts));
       expect(body.name).toBe("Updated Name");
     });
 
@@ -137,7 +149,7 @@ describe("CustomersResource", () => {
         email: "new@example.com",
       });
 
-      const body = JSON.parse(fetchMock().mock.calls[0][1].body);
+      const body = JSON.parse(getBody(fetchMock().mock.calls[0][1]));
       expect(body.email).toBe("new@example.com");
       expect(body.name).toBeUndefined();
       expect(body.phone).toBeUndefined();

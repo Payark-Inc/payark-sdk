@@ -23,6 +23,17 @@ function setFetch(fn: (...args: any[]) => any): void {
   (globalThis as any).fetch = fn;
 }
 
+function getBody(body: any) {
+  if (!body) return body;
+  if (
+    body instanceof Uint8Array ||
+    (typeof Buffer !== "undefined" && Buffer.isBuffer(body))
+  ) {
+    return new TextDecoder().decode(body);
+  }
+  return body;
+}
+
 describe("SDK Integration – End-to-End Workflows", () => {
   const originalFetch = globalThis.fetch;
 
@@ -43,7 +54,7 @@ describe("SDK Integration – End-to-End Workflows", () => {
           return Promise.resolve(
             handler(
               opts.method ?? "GET",
-              opts.body ? JSON.parse(opts.body as string) : undefined,
+              opts.body ? JSON.parse(getBody(opts.body)) : undefined,
             ),
           );
         }
