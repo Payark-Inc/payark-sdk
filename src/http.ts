@@ -111,88 +111,87 @@ export class HttpClient {
 
     const headers = this.buildHeaders(opts.headers, idempotencyKey);
 
-    const program = Effect.gen(this, function* (_) {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    const self = this;
+    const program = Effect.gen(function* () {
       // Build request
-      let reqEffect: Effect.Effect<HttpRequest.HttpClientRequest, any, never> =
-        Effect.succeed(
-          HttpRequest.make(method)(url).pipe(HttpRequest.setHeaders(headers)),
-        );
+      let req = HttpRequest.make(method)(url).pipe(
+        HttpRequest.setHeaders(headers),
+      );
 
       if (opts.body !== undefined && method !== "GET") {
-        reqEffect = reqEffect.pipe(
-          Effect.flatMap(HttpRequest.bodyJson(opts.body)),
-        );
+        req = yield* HttpRequest.bodyJson(opts.body)(req);
       }
 
       // Execute request with retries and timeout
-      return yield* _(
-        reqEffect.pipe(
-          Effect.flatMap((req) => Http.execute(req)),
-          Effect.flatMap(HttpResponse.filterStatusOk),
-          Effect.timeout(timeout),
-          Effect.catchAll((err: any) => {
-            if (
-              err &&
-              typeof err === "object" &&
-              "_tag" in err &&
-              err._tag === "ResponseError"
-            ) {
-              const retryAfterOption = Headers.get(
-                err.response.headers,
-                "retry-after",
-              );
-              if (Option.isSome(retryAfterOption)) {
-                const retryAfter = retryAfterOption.value;
-                const seconds = parseInt(retryAfter, 10);
-                if (!isNaN(seconds)) {
-                  // We sleep before failing, so that the next retry runs later
-                  return Effect.sleep(Duration.seconds(seconds)).pipe(
-                    Effect.flatMap(() => Effect.fail(err)),
-                  );
-                }
+      const response = yield* Http.execute(req).pipe(
+        Effect.flatMap(HttpResponse.filterStatusOk),
+        Effect.timeout(timeout),
+        Effect.catchAll((err) => {
+          if (
+            err &&
+            typeof err === "object" &&
+            "_tag" in err &&
+            err._tag === "ResponseError"
+          ) {
+            const responseError = err as any;
+            const retryAfterOption = Headers.get(
+              responseError.response.headers,
+              "retry-after",
+            );
+            if (Option.isSome(retryAfterOption)) {
+              const retryAfter = retryAfterOption.value;
+              const seconds = parseInt(retryAfter, 10);
+              if (!isNaN(seconds) && seconds > 0) {
+                return Effect.sleep(Duration.seconds(seconds)).pipe(
+                  Effect.flatMap(() => Effect.fail(err)),
+                );
               }
             }
-            return Effect.fail(err);
-          }),
-          // Retry logic: Exponential backoff with jitter + respect Retry-After
-          Effect.retry(
-            Schedule.exponential("500 millis").pipe(
-              Schedule.jittered,
-              // Only retry on 429 and 5xx
-              Schedule.whileInput((err: any) => {
-                if (
-                  err &&
-                  typeof err === "object" &&
-                  "_tag" in err &&
-                  err._tag === "ResponseError"
-                ) {
-                  return RETRYABLE_STATUS_CODES.has(err.response.status);
-                }
-                return true; // Network errors are retryable
-              }),
-              // Limit retries
-              Schedule.intersect(Schedule.recurs(this.maxRetries)),
-            ),
+          }
+          return Effect.fail(err);
+        }),
+        // Retry logic: Exponential backoff with jitter + respect Retry-After
+        Effect.retry(
+          Schedule.exponential("500 millis").pipe(
+            Schedule.jittered,
+            // Only retry on 429 and 5xx
+            Schedule.whileInput((err) => {
+              if (
+                err &&
+                typeof err === "object" &&
+                "_tag" in err &&
+                err._tag === "ResponseError"
+              ) {
+                const responseError = err as any;
+                return RETRYABLE_STATUS_CODES.has(
+                  responseError.response.status,
+                );
+              }
+              return true; // Network errors are retryable
+            }),
+            Schedule.intersect(Schedule.recurs(self.maxRetries)),
           ),
-          Effect.catchAll((err: any) => {
+        ),
+        // Map any remaining errors to PayArkError
+        Effect.catchAll((err: any) =>
+          Effect.gen(function* () {
             if (
               err &&
               typeof err === "object" &&
               "_tag" in err &&
               err._tag === "ResponseError"
             ) {
-              return err.response.json.pipe(
-                Effect.map((errorBody: any) =>
-                  PayArkError.generate(
-                    err.response.status,
-                    errorBody,
-                    errorBody?.error,
-                  ),
+              const responseError = err as any;
+              const errorBody = yield* responseError.response.json.pipe(
+                Effect.catchAll(() => Effect.succeed(undefined)),
+              );
+              return yield* Effect.fail(
+                PayArkError.generate(
+                  responseError.response.status,
+                  errorBody,
+                  errorBody?.error,
                 ),
-                Effect.catchAll(() =>
-                  Effect.succeed(PayArkError.generate(err.response.status)),
-                ),
-                Effect.flatMap(Effect.fail),
               );
             }
 
@@ -202,7 +201,7 @@ export class HttpClient {
               "_tag" in err &&
               err._tag === "TimeoutException"
             ) {
-              return Effect.fail(
+              return yield* Effect.fail(
                 PayArkError.generate(
                   0,
                   undefined,
@@ -211,7 +210,7 @@ export class HttpClient {
               );
             }
 
-            return Effect.fail(
+            return yield* Effect.fail(
               PayArkError.generate(
                 0,
                 undefined,
@@ -219,27 +218,32 @@ export class HttpClient {
               ),
             );
           }),
-          // Parse success response
-          Effect.flatMap((response: any) => {
-            if (response.status === 204) return Effect.succeed({} as T);
-            return response.json as Effect.Effect<T, any, never>;
-          }),
         ),
       );
-    }).pipe(Effect.provide(FetchHttpClient.layer));
 
-    return Effect.runPromiseExit(program).then((exit) => {
-      if (exit._tag === "Success") {
-        return exit.value;
+      // Parse success response
+      if (response.status === 204) {
+        return {} as T;
       }
-      // Unwrap the error from the Cause
-      const failures = Array.from(Cause.failures(exit.cause));
-      if (failures.length > 0) {
-        throw failures[0];
-      }
-      // If no failure (e.g. defect or interrupt), squash it
-      throw Cause.squash(exit.cause);
-    });
+      const data = yield* response.json as Effect.Effect<T, any, never>;
+      return data;
+    }).pipe(Effect.provide(FetchHttpClient.layer)) as Effect.Effect<
+      T,
+      PayArkError,
+      never
+    >;
+
+    const result = await Effect.runPromiseExit(program);
+    if (Exit.isSuccess(result)) {
+      return result.value;
+    }
+
+    // Unwrap the error from the Cause
+    const failures = Array.from(Cause.failures(result.cause));
+    if (failures.length > 0) {
+      throw failures[0];
+    }
+    throw Cause.squash(result.cause);
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
