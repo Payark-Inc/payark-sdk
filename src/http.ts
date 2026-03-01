@@ -15,6 +15,8 @@
 
 import { PayArkError } from "./errors";
 import type { PayArkConfig, PayArkErrorBody } from "./types";
+import { Effect, Schedule, Option } from "effect";
+import { HttpClient as EffectHttp } from "@effect/platform";
 
 /** SDK version – injected at build time for User-Agent header. */
 const SDK_VERSION = "0.1.0";
@@ -80,136 +82,91 @@ export class HttpClient {
    * @returns Parsed JSON response body of type `T`.
    * @throws  {PayArkError} on any non-2xx response or network failure.
    */
+  /**
+   * Execute an HTTP request against the PayArk API.
+   * Internally uses Effect for robust retry logic and error handling.
+   *
+   * @returns Parsed JSON response body of type `T`.
+   * @throws  {PayArkError} on any non-2xx response or network failure.
+   */
   async request<T>(
     method: HttpMethod,
     path: string,
     opts: RequestOptions = {},
   ): Promise<T> {
-    const url = this.buildUrl(path, opts.query);
-    const requestTimeout = opts.timeout ?? this.timeout;
+    const url = this.buildUrl(path, opts.query).toString();
+    const timeout = opts.timeout ?? this.timeout;
 
-    // Generate idempotency key for mutating methods to make retries safe.
-    // The same key is reused across all retry attempts for a given call.
+    // Generate idempotency key for mutating methods
     const idempotencyKey = MUTATING_METHODS.has(method)
       ? this.generateIdempotencyKey()
       : undefined;
+
     const headers = this.buildHeaders(opts.headers, idempotencyKey);
 
-    const baseInit: RequestInit = {
-      method,
-      headers,
-    };
+    const program = Effect.gen(this, function* (_) {
+      // Build request
+      let req = EffectHttp.request
+        .make(method)(url)
+        .pipe(EffectHttp.request.setHeaders(headers));
 
-    if (opts.body !== undefined && method !== "GET") {
-      baseInit.body = JSON.stringify(opts.body);
-    }
+      if (opts.body !== undefined && method !== "GET") {
+        req = req.pipe(EffectHttp.request.jsonBody(opts.body));
+      }
 
-    let lastError: PayArkError | undefined;
-
-    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), requestTimeout);
-
-      let retryAfterMs = 0;
-
-      try {
-        const response = await fetch(url.toString(), {
-          ...baseInit,
-          signal: controller.signal,
-        });
-
-        clearTimeout(timer);
-
-        // ── 2xx success ──
-        if (response.ok) {
-          if (response.status === 204) return {} as T;
-          return (await response.json()) as T;
-        }
-
-        // ── Non-2xx: parse error body ──
-        let errorBody: PayArkErrorBody | undefined;
-        try {
-          errorBody = (await response.json()) as PayArkErrorBody;
-        } catch {
-          // Response body is not JSON – fall through to status text
-        }
-
-        lastError = PayArkError.generate(
-          response.status,
-          errorBody,
-          errorBody?.error,
-        );
-
-        // Handle Rate Limiting (429) - Retry-After
-        if (response.status === 429) {
-          const retryHeader = response.headers.get("Retry-After");
-          if (retryHeader) {
-            if (/^\d+$/.test(retryHeader)) {
-              retryAfterMs = parseInt(retryHeader, 10) * 1000;
-            } else {
-              // Try parsing HTTP Date
-              const date = Date.parse(retryHeader);
-              if (!isNaN(date)) {
-                retryAfterMs = Math.max(0, date - Date.now());
-              }
+      // Execute request with retries and timeout
+      const response = yield* _(
+        EffectHttp.client.fetch().pipe(
+          EffectHttp.client.execute(req),
+          Effect.timeout(timeout),
+          // Retry logic: Exponential backoff with jitter
+          Effect.retry(
+            Schedule.exponential("500 millis").pipe(
+              Schedule.jittered,
+              Schedule.compose(Schedule.recurs(this.maxRetries)),
+              // Only retry on 429 and 5xx
+              Schedule.whileInput((err) => {
+                if (err._tag === "ResponseError") {
+                  return RETRYABLE_STATUS_CODES.has(err.response.status);
+                }
+                return true; // Network errors are retryable
+              }),
+            ),
+          ),
+          Effect.catchAll((err) => {
+            if (err._tag === "ResponseError") {
+              return Effect.promise(async () => {
+                let errorBody: PayArkErrorBody | undefined;
+                try {
+                  errorBody = (await err.response.json()) as PayArkErrorBody;
+                } catch {}
+                throw PayArkError.generate(
+                  err.response.status,
+                  errorBody,
+                  errorBody?.error,
+                );
+              });
             }
-          }
-        }
 
-        // Client errors (4xx) are deterministic – retrying won't help
-        // UNLESS it's 429 (Rate Limit)
-        if (!RETRYABLE_STATUS_CODES.has(response.status)) {
-          throw lastError;
-        }
-      } catch (error) {
-        clearTimeout(timer);
+            if (err._tag === "TimeoutException") {
+              throw PayArkError.generate(
+                0,
+                undefined,
+                `Request timed out after ${timeout}ms`,
+              );
+            }
 
-        if (error instanceof PayArkError) {
-          lastError = error;
-          // Don't retry client-side errors unless retryable (429)
-          if (
-            error.statusCode > 0 &&
-            !RETRYABLE_STATUS_CODES.has(error.statusCode)
-          ) {
-            throw error;
-          }
-        } else if (
-          error instanceof DOMException &&
-          error.name === "AbortError"
-        ) {
-          lastError = PayArkError.generate(
-            0,
-            undefined,
-            `Request timed out after ${requestTimeout}ms`,
-          );
-        } else {
-          lastError = PayArkError.generate(
-            0,
-            undefined,
-            `Network error: ${(error as Error).message}`,
-          );
-        }
-      }
+            throw PayArkError.generate(0, undefined, `Network error: ${err}`);
+          }),
+        ),
+      );
 
-      // Calculate delay: prefer Retry-After, else Exponential Back-off
-      if (attempt < this.maxRetries) {
-        let delay = 0;
+      // Parse success response
+      if (response.status === 204) return {} as T;
+      return yield* _(response.json as Effect.Effect<T, any, never>);
+    });
 
-        if (retryAfterMs > 0) {
-          delay = retryAfterMs;
-        } else {
-          // Exponential back-off: 500ms, 1000ms, 2000ms... + jitter (0-200ms)
-          delay = 500 * Math.pow(2, attempt) + Math.random() * 200;
-        }
-
-        await this.sleep(delay);
-      }
-    }
-
-    throw (
-      lastError ??
-      new PayArkError("Request failed after retries", 0, "unknown_error")
-    );
+    return Effect.runPromise(program);
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────

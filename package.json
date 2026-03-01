@@ -39,5 +39,9 @@
         "typescript": "^5.7.0",
         "@types/node": "^20.0.0"
     },
-    "dependencies": {}
+    "dependencies": {
+        "@effect/platform": "^0.94.5",
+        "@effect/schema": "^0.75.5",
+        "effect": "^3.19.19"
+    }
 }
