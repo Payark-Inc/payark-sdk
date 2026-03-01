@@ -15,8 +15,15 @@
 
 import { PayArkError } from "./errors";
 import type { PayArkConfig, PayArkErrorBody } from "./types";
-import { Effect, Schedule, Option } from "effect";
-import { HttpClient as EffectHttp } from "@effect/platform";
+import { Effect, Schedule } from "effect";
+import {
+  HttpClient as Http,
+  HttpClientRequest as HttpRequest,
+  HttpClientResponse as HttpResponse,
+  FetchHttpClient,
+  Headers,
+} from "@effect/platform";
+import { Cause, Exit, Duration, Option } from "effect";
 
 /** SDK version – injected at build time for User-Agent header. */
 const SDK_VERSION = "0.1.0";
@@ -106,67 +113,137 @@ export class HttpClient {
 
     const program = Effect.gen(this, function* (_) {
       // Build request
-      let req = EffectHttp.request
-        .make(method)(url)
-        .pipe(EffectHttp.request.setHeaders(headers));
+      let reqEffect: Effect.Effect<HttpRequest.HttpClientRequest, any, never> =
+        Effect.succeed(
+          HttpRequest.make(method)(url).pipe(HttpRequest.setHeaders(headers)),
+        );
 
       if (opts.body !== undefined && method !== "GET") {
-        req = req.pipe(EffectHttp.request.jsonBody(opts.body));
+        reqEffect = reqEffect.pipe(
+          Effect.flatMap(HttpRequest.bodyJson(opts.body)),
+        );
       }
 
       // Execute request with retries and timeout
-      const response = yield* _(
-        EffectHttp.client.fetch().pipe(
-          EffectHttp.client.execute(req),
+      return yield* _(
+        reqEffect.pipe(
+          Effect.flatMap((req) => Http.execute(req)),
+          Effect.flatMap(HttpResponse.filterStatusOk),
           Effect.timeout(timeout),
-          // Retry logic: Exponential backoff with jitter
+          // Retry logic: Exponential backoff with jitter + respect Retry-After
           Effect.retry(
             Schedule.exponential("500 millis").pipe(
               Schedule.jittered,
-              Schedule.compose(Schedule.recurs(this.maxRetries)),
               // Only retry on 429 and 5xx
-              Schedule.whileInput((err) => {
-                if (err._tag === "ResponseError") {
+              Schedule.whileInput((err: any) => {
+                if (
+                  err &&
+                  typeof err === "object" &&
+                  "_tag" in err &&
+                  err._tag === "ResponseError"
+                ) {
                   return RETRYABLE_STATUS_CODES.has(err.response.status);
                 }
                 return true; // Network errors are retryable
               }),
+              // Limit retries
+              Schedule.intersect(Schedule.recurs(this.maxRetries)),
+              // Add delay from Retry-After if present
+              Schedule.addDelay((_, err: any) => {
+                console.log("DEBUG: err", err);
+                let extraDelay = Duration.zero;
+                if (
+                  err &&
+                  typeof err === "object" &&
+                  "_tag" in err &&
+                  err._tag === "ResponseError"
+                ) {
+                  console.log(
+                    "DEBUG: err.response.headers",
+                    err.response.headers,
+                  );
+                  const retryAfterOption = Headers.get(
+                    err.response.headers,
+                    "retry-after",
+                  );
+                  if (Option.isSome(retryAfterOption)) {
+                    const retryAfter = retryAfterOption.value;
+                    const seconds = parseInt(retryAfter, 10);
+                    if (!isNaN(seconds)) {
+                      extraDelay = Duration.seconds(seconds);
+                    }
+                  }
+                }
+                return extraDelay;
+              }),
             ),
           ),
-          Effect.catchAll((err) => {
-            if (err._tag === "ResponseError") {
-              return Effect.promise(async () => {
-                let errorBody: PayArkErrorBody | undefined;
-                try {
-                  errorBody = (await err.response.json()) as PayArkErrorBody;
-                } catch {}
-                throw PayArkError.generate(
-                  err.response.status,
-                  errorBody,
-                  errorBody?.error,
-                );
-              });
-            }
-
-            if (err._tag === "TimeoutException") {
-              throw PayArkError.generate(
-                0,
-                undefined,
-                `Request timed out after ${timeout}ms`,
+          Effect.catchAll((err: any) => {
+            if (
+              err &&
+              typeof err === "object" &&
+              "_tag" in err &&
+              err._tag === "ResponseError"
+            ) {
+              return err.response.json.pipe(
+                Effect.map((errorBody: any) =>
+                  PayArkError.generate(
+                    err.response.status,
+                    errorBody,
+                    errorBody?.error,
+                  ),
+                ),
+                Effect.catchAll(() =>
+                  Effect.succeed(PayArkError.generate(err.response.status)),
+                ),
+                Effect.flatMap(Effect.fail),
               );
             }
 
-            throw PayArkError.generate(0, undefined, `Network error: ${err}`);
+            if (
+              err &&
+              typeof err === "object" &&
+              "_tag" in err &&
+              err._tag === "TimeoutException"
+            ) {
+              return Effect.fail(
+                PayArkError.generate(
+                  0,
+                  undefined,
+                  `Request timed out after ${timeout}ms`,
+                ),
+              );
+            }
+
+            return Effect.fail(
+              PayArkError.generate(
+                0,
+                undefined,
+                `Network error: ${String(err)}`,
+              ),
+            );
+          }),
+          // Parse success response
+          Effect.flatMap((response: any) => {
+            if (response.status === 204) return Effect.succeed({} as T);
+            return response.json as Effect.Effect<T, any, never>;
           }),
         ),
       );
+    }).pipe(Effect.provide(FetchHttpClient.layer));
 
-      // Parse success response
-      if (response.status === 204) return {} as T;
-      return yield* _(response.json as Effect.Effect<T, any, never>);
+    return Effect.runPromiseExit(program).then((exit) => {
+      if (exit._tag === "Success") {
+        return exit.value;
+      }
+      // Unwrap the error from the Cause
+      const failures = Array.from(Cause.failures(exit.cause));
+      if (failures.length > 0) {
+        throw failures[0];
+      }
+      // If no failure (e.g. defect or interrupt), squash it
+      throw Cause.squash(exit.cause);
     });
-
-    return Effect.runPromise(program);
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
