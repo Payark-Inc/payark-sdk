@@ -1,4 +1,4 @@
-import * as Schema from "@effect/schema/Schema";
+import { Schema } from "effect";
 
 /**
  * Atomic Atoms
@@ -201,16 +201,16 @@ export type CreateCustomerParams = Schema.Schema.Type<
 >;
 
 export const ListPaymentsParams = Schema.Struct({
-  limit: Schema.optional(Schema.Number),
-  offset: Schema.optional(Schema.Number),
+  limit: Schema.optional(Schema.NumberFromString),
+  offset: Schema.optional(Schema.NumberFromString),
   projectId: Schema.optional(Schema.String),
 });
 
 export type ListPaymentsParams = Schema.Schema.Type<typeof ListPaymentsParams>;
 
 export const ListCustomersParams = Schema.Struct({
-  limit: Schema.optional(Schema.Number),
-  offset: Schema.optional(Schema.Number),
+  limit: Schema.optional(Schema.NumberFromString),
+  offset: Schema.optional(Schema.NumberFromString),
   email: Schema.optional(Schema.String),
   projectId: Schema.optional(Schema.String),
 });
@@ -246,8 +246,8 @@ export type CreateSubscriptionParams = Schema.Schema.Type<
 >;
 
 export const ListSubscriptionsParams = Schema.Struct({
-  limit: Schema.optional(Schema.Number),
-  offset: Schema.optional(Schema.Number),
+  limit: Schema.optional(Schema.NumberFromString),
+  offset: Schema.optional(Schema.NumberFromString),
   projectId: Schema.optional(Id),
   customerId: Schema.optional(Id),
   status: Schema.optional(SubscriptionStatus),
