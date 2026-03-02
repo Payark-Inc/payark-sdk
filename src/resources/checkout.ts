@@ -36,7 +36,7 @@ export async function createCheckout(
  * @deprecated Use functional exports instead for better tree-shaking.
  */
 export class CheckoutResource {
-  constructor(private readonly http: HttpClient) {}
+  constructor(public readonly http: HttpClient) {}
 
   async create(params: CreateCheckoutParams): Promise<CheckoutSession> {
     return createCheckout(this, params);

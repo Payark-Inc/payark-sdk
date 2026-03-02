@@ -23,7 +23,7 @@ export async function listProjects(client: PayArkClient): Promise<Project[]> {
  * @deprecated Use functional exports instead for better tree-shaking.
  */
 export class Projects {
-  constructor(private readonly http: HttpClient) {}
+  constructor(public readonly http: HttpClient) {}
 
   async list(): Promise<Project[]> {
     return listProjects(this);

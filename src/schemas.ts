@@ -148,7 +148,7 @@ export type PaginationMeta = Schema.Schema.Type<typeof PaginationMeta>;
  */
 export const PaginatedResponse = <A, I, R>(schema: Schema.Schema<A, I, R>) =>
   Schema.Struct({
-    data: Schema.ReadonlyArray(schema),
+    data: Schema.Array(schema),
     meta: PaginationMeta,
   });
 
@@ -161,7 +161,7 @@ export interface PaginatedResponse<T> {
 
 export const CreateCheckoutParams = Schema.Struct({
   amount: Schema.Number,
-  currency: Schema.optional(Schema.String, { default: () => "NPR" }),
+  currency: Schema.optionalWith(Schema.String, { default: () => "NPR" }),
   provider: Provider,
   returnUrl: Schema.String,
   cancelUrl: Schema.optional(Schema.String),
@@ -233,7 +233,7 @@ export type UpdateCustomerParams = Schema.Schema.Type<
 export const CreateSubscriptionParams = Schema.Struct({
   customer_id: Id,
   amount: Schema.Number,
-  currency: Schema.optional(Schema.String, { default: () => "NPR" }),
+  currency: Schema.optionalWith(Schema.String, { default: () => "NPR" }),
   interval: SubscriptionInterval,
   interval_count: Schema.optional(Schema.Number),
   project_id: Schema.optional(Id),

@@ -56,7 +56,7 @@ export async function retrievePayment(
  * @deprecated Use functional exports instead for better tree-shaking.
  */
 export class PaymentsResource {
-  constructor(private readonly http: HttpClient) {}
+  constructor(public readonly http: HttpClient) {}
 
   async list(
     params: ListPaymentsParams = {},

@@ -109,7 +109,7 @@ export async function deleteCustomer(
  * @deprecated Use functional exports instead for better tree-shaking.
  */
 export class CustomersResource {
-  constructor(private readonly http: HttpClient) {}
+  constructor(public readonly http: HttpClient) {}
 
   async create(params: CreateCustomerParams): Promise<Customer> {
     return createCustomer(this, params);

@@ -94,7 +94,7 @@ export async function cancelSubscription(
  * @deprecated Use functional exports instead for better tree-shaking.
  */
 export class SubscriptionsResource {
-  constructor(private readonly http: HttpClient) {}
+  constructor(public readonly http: HttpClient) {}
 
   async create(params: CreateSubscriptionParams): Promise<Subscription> {
     return createSubscription(this, params);

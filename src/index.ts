@@ -44,6 +44,7 @@ export {
   PayArkConnectionError,
   PayArkSignatureVerificationError,
 } from "./errors";
+export type { PayArkErrorCode } from "./errors";
 
 // ── Version ────────────────────────────────────────────────────────────────
 /** SDK version string for runtime introspection. */
