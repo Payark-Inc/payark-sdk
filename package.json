@@ -12,7 +12,9 @@
             "require": "./dist/index.js"
         },
         "./schemas": {
-            "types": "./src/schemas.ts"
+            "types": "./src/schemas.ts",
+            "import": "./src/schemas.ts",
+            "default": "./src/schemas.ts"
         }
     },
     "files": [
