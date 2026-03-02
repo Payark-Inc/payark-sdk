@@ -10,140 +10,107 @@ import type {
   Subscription,
   ListSubscriptionsParams,
   PaginatedResponse,
-} from "../types";
+} from "../schemas";
 import {
   createAutoPaginatingList,
   type AutoPaginatingList,
 } from "../pagination";
+import type { PayArkClient } from "./customers";
+
+// ── Functional API ─────────────────────────────────────────────────────────
+
+/**
+ * Create a new subscription for a customer.
+ */
+export async function createSubscription(
+  client: PayArkClient,
+  params: CreateSubscriptionParams,
+): Promise<Subscription> {
+  return client.http.request<Subscription>("POST", "/v1/subscriptions", {
+    body: params,
+  });
+}
+
+/**
+ * Retrieve a single subscription by its unique ID.
+ */
+export async function retrieveSubscription(
+  client: PayArkClient,
+  id: string,
+): Promise<Subscription> {
+  return client.http.request<Subscription>(
+    "GET",
+    `/v1/subscriptions/${encodeURIComponent(id)}`,
+  );
+}
+
+/**
+ * List subscriptions with auto-pagination support.
+ */
+export async function listSubscriptions(
+  client: PayArkClient,
+  params: ListSubscriptionsParams = {},
+): Promise<AutoPaginatingList<Subscription>> {
+  const limit = params.limit ?? 100;
+
+  const fetchPage = (offset: number) =>
+    client.http.request<PaginatedResponse<Subscription>>(
+      "GET",
+      "/v1/subscriptions",
+      {
+        query: {
+          limit,
+          offset,
+          projectId: params.projectId,
+          customerId: params.customerId,
+          status: params.status,
+        },
+      },
+    );
+
+  const firstPage = await fetchPage(params.offset ?? 0);
+  return createAutoPaginatingList(firstPage, fetchPage, limit);
+}
+
+/**
+ * Cancel a subscription.
+ */
+export async function cancelSubscription(
+  client: PayArkClient,
+  id: string,
+  immediate = false,
+): Promise<Subscription> {
+  return client.http.request<Subscription>(
+    "POST",
+    `/v1/subscriptions/${encodeURIComponent(id)}/cancel`,
+    { body: { immediate } },
+  );
+}
+
+// ── Legacy Resource Class ──────────────────────────────────────────────────
 
 /**
  * Resource class for managing PayArk Subscriptions.
- *
- * Provides operations for creating, listing, retrieving, and cancelling
- * recurring billing subscriptions tied to customers.
- *
- * @example
- * ```ts
- * // Create a subscription
- * const sub = await payark.subscriptions.create({
- *   customer_id: 'cus_abc123',
- *   amount: 999,
- *   currency: 'NPR',
- *   interval: 'month',
- * });
- *
- * // List active subscriptions
- * for await (const sub of payark.subscriptions.list({ status: 'active' })) {
- *   console.log(sub.id, sub.amount);
- * }
- * ```
+ * @deprecated Use functional exports instead for better tree-shaking.
  */
 export class SubscriptionsResource {
   constructor(private readonly http: HttpClient) {}
 
-  /**
-   * Create a new subscription for a customer.
-   *
-   * @param params - Subscription creation parameters including customer_id, amount, and interval.
-   * @returns The created subscription object.
-   * @throws {PayArkError} on validation failure or if customer does not exist.
-   *
-   * @example
-   * ```ts
-   * const sub = await payark.subscriptions.create({
-   *   customer_id: 'cus_abc123',
-   *   amount: 999,
-   *   currency: 'NPR',
-   *   interval: 'month',
-   * });
-   * console.log(sub.id); // 'sub_...
-   * ```
-   */
   async create(params: CreateSubscriptionParams): Promise<Subscription> {
-    return this.http.request<Subscription>("POST", "/v1/subscriptions", {
-      body: params,
-    });
+    return createSubscription(this, params);
   }
 
-  /**
-   * Retrieve a single subscription by its unique ID.
-   *
-   * @param id - The subscription identifier (e.g., `"sub_abc123"`).
-   * @returns The full subscription object.
-   * @throws {PayArkError} with `not_found_error` (404) if the subscription does not exist.
-   *
-   * @example
-   * ```ts
-   * const sub = await payark.subscriptions.retrieve('sub_abc123');
-   * console.log(sub.status, sub.current_period_end);
-   * ```
-   */
   async retrieve(id: string): Promise<Subscription> {
-    return this.http.request<Subscription>(
-      "GET",
-      `/v1/subscriptions/${encodeURIComponent(id)}`,
-    );
+    return retrieveSubscription(this, id);
   }
 
-  /**
-   * List subscriptions with auto-pagination support.
-   *
-   * @param params - Filtering and pagination parameters.
-   * @returns An auto-paginating list of subscriptions.
-   *
-   * @example
-   * ```ts
-   * for await (const sub of payark.subscriptions.list({ status: 'active' })) {
-   *   console.log(sub.id, sub.amount);
-   * }
-   * ```
-   */
   async list(
     params: ListSubscriptionsParams = {},
   ): Promise<AutoPaginatingList<Subscription>> {
-    const limit = params.limit ?? 100;
-
-    const fetchPage = (offset: number) =>
-      this.http.request<PaginatedResponse<Subscription>>(
-        "GET",
-        "/v1/subscriptions",
-        {
-          query: {
-            limit,
-            offset,
-            projectId: params.projectId,
-            customerId: params.customerId,
-            status: params.status,
-          },
-        },
-      );
-
-    const firstPage = await fetchPage(params.offset ?? 0);
-    return createAutoPaginatingList(firstPage, fetchPage, limit);
+    return listSubscriptions(this, params);
   }
 
-  /**
-   * Cancel a subscription.
-   *
-   * @param id        - The subscription ID to cancel.
-   * @param immediate - If `true`, cancel immediately. If `false`, cancel at period end.
-   * @returns The updated subscription with `status: 'cancelled'`.
-   * @throws {PayArkError} with `not_found_error` (404) if subscription does not exist.
-   *
-   * @example
-   * ```ts
-   * // Cancel at end of billing period
-   * await payark.subscriptions.cancel('sub_abc123');
-   *
-   * // Cancel immediately
-   * await payark.subscriptions.cancel('sub_abc123', true);
-   * ```
-   */
   async cancel(id: string, immediate = false): Promise<Subscription> {
-    return this.http.request<Subscription>(
-      "POST",
-      `/v1/subscriptions/${encodeURIComponent(id)}/cancel`,
-      { body: { immediate } },
-    );
+    return cancelSubscription(this, id, immediate);
   }
 }

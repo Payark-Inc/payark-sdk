@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { PayArkError } from "./errors";
-import type { PayArkConfig, PayArkErrorBody } from "./types";
+import type { PayArkConfig, PayArkErrorBody } from "./schemas";
 import { Effect, Schedule } from "effect";
 import {
   HttpClient as Http,

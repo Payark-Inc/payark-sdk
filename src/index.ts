@@ -1,58 +1,49 @@
 // ---------------------------------------------------------------------------
 // PayArk SDK – Public API Surface
 // ---------------------------------------------------------------------------
-// Everything re-exported here is part of the public contract.
-// Internal modules (http.ts) are intentionally NOT exported.
-// ---------------------------------------------------------------------------
 
-// ── Main client ────────────────────────────────────────────────────────────
+// ── Models & Schemas ───────────────────────────────────────────────────────
+export * from "./schemas";
+
+// ── Client ─────────────────────────────────────────────────────────────────
 export { PayArk } from "./client";
+export type { PayArkClient } from "./resources/customers";
 
-// ── Error classes ──────────────────────────────────────────────────────────
+// ── Functional API ─────────────────────────────────────────────────────────
+export { createCheckout } from "./resources/checkout";
+export { listPayments, retrievePayment } from "./resources/payments";
+export {
+  createCustomer,
+  retrieveCustomer,
+  updateCustomer,
+  deleteCustomer,
+  listCustomers,
+} from "./resources/customers";
+export {
+  createSubscription,
+  retrieveSubscription,
+  listSubscriptions,
+  cancelSubscription,
+} from "./resources/subscriptions";
+export { listProjects } from "./resources/projects";
+export {
+  constructEvent,
+  parseHeader,
+  verifySignature,
+} from "./resources/webhooks";
+
+// ── Errors ─────────────────────────────────────────────────────────────────
 export {
   PayArkError,
   PayArkAuthenticationError,
-  PayArkPermissionError,
   PayArkInvalidRequestError,
   PayArkNotFoundError,
+  PayArkPermissionError,
   PayArkRateLimitError,
   PayArkAPIError,
   PayArkConnectionError,
   PayArkSignatureVerificationError,
 } from "./errors";
-export type { PayArkErrorCode } from "./errors";
-
-// ── Types ──────────────────────────────────────────────────────────────────
-export type {
-  // Config
-  PayArkConfig,
-  // Checkout
-  CreateCheckoutParams,
-  CheckoutSession,
-  // Payments
-  Payment,
-  PaymentStatus,
-  ListPaymentsParams,
-  PaginatedResponse,
-  PaginationMeta,
-  // Project
-  Project,
-  // Provider
-  Provider,
-  // Customers
-  Customer,
-  CreateCustomerParams,
-  UpdateCustomerParams,
-  ListCustomersParams,
-  // Webhooks
-  WebhookEvent,
-  WebhookEventType,
-  // Error body
-  PayArkErrorBody,
-} from "./types";
-
-// ── Pagination ────────────────────────────────────────────────────────────
-export type { AutoPaginatingList } from "./pagination";
 
 // ── Version ────────────────────────────────────────────────────────────────
 /** SDK version string for runtime introspection. */
