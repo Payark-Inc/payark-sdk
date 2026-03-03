@@ -160,7 +160,7 @@ export interface PaginatedResponse<T> {
 // ── Params ─────────────────────────────────────────────────────────────────
 
 export const CreateCheckoutParams = Schema.Struct({
-  amount: Schema.Number,
+  amount: Schema.Number.pipe(Schema.greaterThan(0)),
   currency: Schema.optionalWith(Schema.String, { default: () => "NPR" }),
   provider: Provider,
   returnUrl: Schema.String,
@@ -232,7 +232,7 @@ export type UpdateCustomerParams = Schema.Schema.Type<
 
 export const CreateSubscriptionParams = Schema.Struct({
   customer_id: Id,
-  amount: Schema.Number,
+  amount: Schema.Number.pipe(Schema.greaterThan(0)),
   currency: Schema.optionalWith(Schema.String, { default: () => "NPR" }),
   interval: SubscriptionInterval,
   interval_count: Schema.optional(Schema.Number),
