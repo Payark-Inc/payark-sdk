@@ -56,7 +56,7 @@ describe("SDK Property-Based Tests", () => {
     // We want to ensure that converting to cents (x100) is stable for PBT.
 
     fc.assert(
-      fc.property(fc.float({ min: 0, max: 1000000 }), (amount) => {
+      fc.property(fc.float({ min: 0, max: 1000000, noNaN: true }), (amount) => {
         const cents = Math.round(amount * 100);
         const back = cents / 100;
 
