@@ -206,7 +206,12 @@ try {
 
 ## Retries & Idempotency
 
-The SDK automatically retries **server errors (500, 502, 503, 504)** with exponential back-off and jitter. Client errors (4xx) fail immediately since they are deterministic.
+The SDK automatically retries:
+
+- **Server errors (`500`, `502`, `503`, `504`)** with exponential back-off and jitter.
+- **Rate limits (`429`)** only when the API provides a valid `Retry-After` header.
+
+Other client errors (`4xx`) fail immediately since they are deterministic.
 
 - Default: 2 retries
 - Back-off: 500ms → 1s → 2s (+ random jitter)

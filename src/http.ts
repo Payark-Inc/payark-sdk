@@ -44,7 +44,7 @@ export interface RequestOptions {
 }
 
 /** HTTP status codes that signal a retryable server failure. */
-const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
+const RETRYABLE_STATUS_CODES = new Set([500, 502, 503, 504]);
 
 /** Methods that mutate state and require idempotency protection. */
 const MUTATING_METHODS = new Set<HttpMethod>(["POST", "PUT", "PATCH"]);
@@ -114,6 +114,21 @@ export class HttpClient {
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
     const program = Effect.gen(function* () {
+      const parseRetryAfterMs = (retryAfter: string): number | undefined => {
+        const seconds = Number.parseInt(retryAfter, 10);
+        if (Number.isFinite(seconds) && seconds > 0) {
+          return seconds * 1000;
+        }
+
+        const retryAt = Date.parse(retryAfter);
+        if (!Number.isNaN(retryAt)) {
+          const delta = retryAt - Date.now();
+          if (delta > 0) return delta;
+        }
+
+        return undefined;
+      };
+
       // Build request
       let req = HttpRequest.make(method)(url).pipe(
         HttpRequest.setHeaders(headers),
@@ -139,11 +154,14 @@ export class HttpClient {
               responseError.response.headers,
               "retry-after",
             );
-            if (Option.isSome(retryAfterOption)) {
+            if (
+              responseError.response.status === 429 &&
+              Option.isSome(retryAfterOption)
+            ) {
               const retryAfter = retryAfterOption.value;
-              const seconds = parseInt(retryAfter, 10);
-              if (!isNaN(seconds) && seconds > 0) {
-                return Effect.sleep(Duration.seconds(seconds)).pipe(
+              const retryAfterMs = parseRetryAfterMs(retryAfter);
+              if (retryAfterMs !== undefined) {
+                return Effect.sleep(Duration.millis(retryAfterMs)).pipe(
                   Effect.flatMap(() => Effect.fail(err)),
                 );
               }
@@ -155,7 +173,7 @@ export class HttpClient {
         Effect.retry(
           Schedule.exponential("500 millis").pipe(
             Schedule.jittered,
-            // Only retry on 429 and 5xx
+            // Retry server failures and rate limits that provide Retry-After.
             Schedule.whileInput((err) => {
               if (
                 err &&
@@ -164,6 +182,14 @@ export class HttpClient {
                 err._tag === "ResponseError"
               ) {
                 const responseError = err as any;
+                if (responseError.response.status === 429) {
+                  const retryAfter = Headers.get(
+                    responseError.response.headers,
+                    "retry-after",
+                  );
+                  if (Option.isNone(retryAfter)) return false;
+                  return parseRetryAfterMs(retryAfter.value) !== undefined;
+                }
                 return RETRYABLE_STATUS_CODES.has(
                   responseError.response.status,
                 );

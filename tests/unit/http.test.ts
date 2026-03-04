@@ -4,7 +4,7 @@
 // Tests the internal HTTP client including:
 //   - Authentication headers
 //   - Request construction (URL, body, query params)
-//   - Retry logic with exponential back-off
+//   - Retry logic with exponential back-off for retryable server/network failures
 //   - Idempotency key generation for POST
 //   - Timeout handling
 //   - Error parsing and classification
@@ -686,7 +686,7 @@ describe("HttpClient", () => {
       expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     });
 
-    test("should retry on 429 Too Many Requests", async () => {
+    test("should NOT retry on 429 without Retry-After", async () => {
       const client = createClient({ maxRetries: 1 });
       setFetch(
         mock(() =>
@@ -700,7 +700,7 @@ describe("HttpClient", () => {
         // Expected
       }
 
-      expect(globalThis.fetch).toHaveBeenCalledTimes(2);
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     });
 
     test("should respect Retry-After header (seconds)", async () => {
