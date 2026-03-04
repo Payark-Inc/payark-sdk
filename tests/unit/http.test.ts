@@ -164,7 +164,7 @@ describe("HttpClient", () => {
       await client.request("GET", "/v1/test");
 
       const url = fetchMock().lastCall?.url.toString();
-      expect(url).toStartWith("https://api.payark.com");
+      expect(url).toStartWith("https://payark-api.codimo-dev.workers.dev");
     });
   });
 
@@ -725,6 +725,78 @@ describe("HttpClient", () => {
       expect(timestamps.length).toBe(2);
       const delay = timestamps[1] - timestamps[0];
       expect(delay).toBeGreaterThanOrEqual(1000);
+    });
+
+    test("should respect Retry-After header (HTTP-date)", async () => {
+      const client = createClient({ maxRetries: 1 });
+      const timestamps: number[] = [];
+      const retryAt = new Date(Date.now() + 3_000).toUTCString();
+
+      setFetch(
+        mock(() => {
+          timestamps.push(Date.now());
+          return Promise.resolve(
+            mockResponse({ error: "Slow down" }, 429, {
+              "Retry-After": retryAt,
+            }),
+          );
+        }),
+      );
+
+      try {
+        await client.request("GET", "/test");
+      } catch {
+        // Expected
+      }
+
+      expect(timestamps.length).toBe(2);
+      const delay = timestamps[1] - timestamps[0];
+      expect(delay).toBeGreaterThanOrEqual(1000);
+    });
+
+    test("should NOT retry on 429 with invalid Retry-After", async () => {
+      const client = createClient({ maxRetries: 1 });
+
+      setFetch(
+        mock(() =>
+          Promise.resolve(
+            mockResponse({ error: "Too Many Requests" }, 429, {
+              "Retry-After": "1seconds",
+            }),
+          ),
+        ),
+      );
+
+      try {
+        await client.request("GET", "/test");
+      } catch {
+        // Expected
+      }
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    test("should NOT retry on 429 with past Retry-After date", async () => {
+      const client = createClient({ maxRetries: 1 });
+      const retryAt = new Date(Date.now() - 10_000).toUTCString();
+
+      setFetch(
+        mock(() =>
+          Promise.resolve(
+            mockResponse({ error: "Too Many Requests" }, 429, {
+              "Retry-After": retryAt,
+            }),
+          ),
+        ),
+      );
+
+      try {
+        await client.request("GET", "/test");
+      } catch {
+        // Expected
+      }
+
+      expect(globalThis.fetch).toHaveBeenCalledTimes(1);
     });
 
     test("should retry on 500 server error up to maxRetries", async () => {
