@@ -6,7 +6,7 @@
 // Ref: https://docs.stripe.com/error-handling
 // ---------------------------------------------------------------------------
 
-import type { PayArkErrorBody } from "./schemas";
+import type { PayArkErrorBody } from "./types";
 
 /** Machine-readable error codes emitted by the SDK. */
 export type PayArkErrorCode =
