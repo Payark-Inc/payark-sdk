@@ -74,10 +74,7 @@ export class HttpClient {
     this.apiKey = config.apiKey.trim();
     this.baseUrl = (
       config.baseUrl ?? "https://payark-api.codimo-dev.workers.dev/"
-    ).replace(
-      /\/+$/,
-      "",
-    );
+    ).replace(/\/+$/, "");
     this.timeout = config.timeout ?? 30_000;
     this.maxRetries = config.maxRetries ?? 2;
     this.sandbox = config.sandbox ?? false;
@@ -150,7 +147,10 @@ export class HttpClient {
         if (!isResponseError(err)) return undefined;
         const responseError = err as any;
         if (responseError.response.status !== 429) return undefined;
-        const retryAfter = Headers.get(responseError.response.headers, "retry-after");
+        const retryAfter = Headers.get(
+          responseError.response.headers,
+          "retry-after",
+        );
         if (Option.isNone(retryAfter)) return undefined;
         return parseRetryAfterMs(retryAfter.value);
       };
@@ -170,9 +170,9 @@ export class HttpClient {
         req = yield* HttpRequest.bodyJson(opts.body)(req);
       }
 
-      const executeWithRetry: (attempt: number) => Effect.Effect<any, any, any> = (
+      const executeWithRetry: (
         attempt: number,
-      ) =>
+      ) => Effect.Effect<any, any, any> = (attempt: number) =>
         Http.execute(req).pipe(
           Effect.flatMap(HttpResponse.filterStatusOk),
           Effect.timeout(timeout),

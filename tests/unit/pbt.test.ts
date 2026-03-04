@@ -24,7 +24,10 @@ describe("SDK Property-Based Tests", () => {
 
   const createCheckoutParamsArb: fc.Arbitrary<CreateCheckoutParams> = fc.record(
     {
-      amount: fc.oneof(fc.nat({ max: 1_000_000 }).map((n) => n + 1), fc.double({ min: 0.01, max: 1_000_000, noNaN: true })),
+      amount: fc.oneof(
+        fc.nat({ max: 1_000_000 }).map((n) => n + 1),
+        fc.double({ min: 0.01, max: 1_000_000, noNaN: true }),
+      ),
       currency: fc.oneof(fc.constant("NPR"), fc.constant("USD"), fc.string()),
       provider: providerArb,
       returnUrl: fc.webUrl(),
