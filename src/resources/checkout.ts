@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import type { HttpClient } from "../http";
-import type { CheckoutSession, CreateCheckoutParams } from "../schemas";
+import type { CheckoutSession, CreateCheckoutParams } from "../types";
 import type { PayArkClient } from "./customers";
 
 // ── Functional API ─────────────────────────────────────────────────────────

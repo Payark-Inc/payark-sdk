@@ -10,7 +10,7 @@ import type {
   Subscription,
   ListSubscriptionsParams,
   PaginatedResponse,
-} from "../schemas";
+} from "../types";
 import {
   createAutoPaginatingList,
   type AutoPaginatingList,

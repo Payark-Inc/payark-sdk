@@ -11,7 +11,7 @@ import type {
   Customer,
   ListCustomersParams,
   PaginatedResponse,
-} from "./../schemas";
+} from "./../types";
 import {
   createAutoPaginatingList,
   type AutoPaginatingList,

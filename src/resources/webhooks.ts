@@ -5,7 +5,7 @@
 // ---------------------------------------------------------------------------
 
 import { PayArkSignatureVerificationError } from "../errors";
-import type { WebhookEvent } from "../schemas";
+import type { WebhookEvent } from "../types";
 
 /** Default tolerance: 5 minutes (300 seconds). */
 const DEFAULT_TOLERANCE_SECONDS = 300;
