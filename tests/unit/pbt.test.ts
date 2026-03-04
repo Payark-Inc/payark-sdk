@@ -5,7 +5,7 @@
 import { describe, test, expect } from "bun:test";
 import * as fc from "fast-check";
 import * as Schema from "@effect/schema/Schema";
-import { CreateCheckoutParams, Provider } from "../../src/schemas";
+import { CreateCheckoutParams, Provider } from "../../src/types";
 import { Either } from "effect";
 
 describe("SDK Property-Based Tests", () => {
