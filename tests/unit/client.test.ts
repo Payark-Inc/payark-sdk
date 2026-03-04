@@ -24,18 +24,6 @@ function fetchMock(): { mock: { calls: any[][] } } {
   return globalThis.fetch as any;
 }
 
-function getBody(opts: any) {
-  const body = opts.body;
-  if (!body) return body;
-  if (
-    body instanceof Uint8Array ||
-    (typeof Buffer !== "undefined" && Buffer.isBuffer(body))
-  ) {
-    return new TextDecoder().decode(body);
-  }
-  return body;
-}
-
 describe("PayArk Client", () => {
   const originalFetch = globalThis.fetch;
 
@@ -170,7 +158,7 @@ describe("PayArk Client", () => {
         returnUrl: "https://example.com",
       });
 
-      const body = JSON.parse(getBody(fetchMock().mock.calls[0][1]));
+      const body = JSON.parse(fetchMock().mock.calls[0][1].body);
       expect(body.currency).toBe("NPR");
     });
 
@@ -199,7 +187,7 @@ describe("PayArk Client", () => {
         returnUrl: "https://example.com",
       });
 
-      const body = JSON.parse(getBody(fetchMock().mock.calls[0][1]));
+      const body = JSON.parse(fetchMock().mock.calls[0][1].body);
       expect(body.currency).toBe("USD");
     });
 
@@ -228,7 +216,7 @@ describe("PayArk Client", () => {
         metadata: { order_id: "ORD-42", user_email: "user@test.com" },
       });
 
-      const body = JSON.parse(getBody(fetchMock().mock.calls[0][1]));
+      const body = JSON.parse(fetchMock().mock.calls[0][1].body);
       expect(body.metadata.order_id).toBe("ORD-42");
       expect(body.metadata.user_email).toBe("user@test.com");
     });
@@ -258,7 +246,7 @@ describe("PayArk Client", () => {
         cancelUrl: "https://example.com/cancel",
       });
 
-      const body = JSON.parse(getBody(fetchMock().mock.calls[0][1]));
+      const body = JSON.parse(fetchMock().mock.calls[0][1].body);
       expect(body.cancelUrl).toBe("https://example.com/cancel");
     });
 
@@ -286,7 +274,7 @@ describe("PayArk Client", () => {
         returnUrl: "https://example.com",
       });
 
-      const body = JSON.parse(getBody(fetchMock().mock.calls[0][1]));
+      const body = JSON.parse(fetchMock().mock.calls[0][1].body);
       expect(body.cancelUrl).toBeUndefined();
     });
 
@@ -617,12 +605,7 @@ describe("PayArk Client", () => {
 
       setFetch(
         mock((_: any, opts: any) => {
-          const auth =
-            opts.headers instanceof Headers
-              ? opts.headers.get("authorization")
-              : opts.headers?.["authorization"] ||
-                opts.headers?.["Authorization"];
-          apiKeys.push(auth);
+          apiKeys.push(opts.headers.Authorization);
           return Promise.resolve(
             new Response(
               JSON.stringify({
