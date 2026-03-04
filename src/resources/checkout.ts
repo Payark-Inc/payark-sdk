@@ -2,50 +2,43 @@
 // PayArk SDK – Checkout Resource
 // ---------------------------------------------------------------------------
 // Encapsulates all operations related to the Checkout Sessions API.
-// Follows the "resource" pattern (similar to stripe.checkout.sessions).
 // ---------------------------------------------------------------------------
 
-import type { HttpClient } from '../http';
-import type { CheckoutSession, CreateCheckoutParams } from '../types';
+import type { HttpClient } from "../http";
+import type { CheckoutSession, CreateCheckoutParams } from "../types";
+import type { PayArkClient } from "./customers";
+
+// ── Functional API ─────────────────────────────────────────────────────────
+
+/**
+ * Create a new checkout session.
+ */
+export async function createCheckout(
+  client: PayArkClient,
+  params: CreateCheckoutParams,
+): Promise<CheckoutSession> {
+  return client.http.request<CheckoutSession>("POST", "/v1/checkout", {
+    body: {
+      amount: params.amount,
+      currency: params.currency ?? "NPR",
+      provider: params.provider,
+      returnUrl: params.returnUrl,
+      cancelUrl: params.cancelUrl,
+      metadata: params.metadata,
+    },
+  });
+}
+
+// ── Legacy Resource Class ──────────────────────────────────────────────────
 
 /**
  * Resource class for PayArk Checkout Sessions.
- *
- * @example
- * ```ts
- * const session = await payark.checkout.create({
- *   amount: 500,
- *   provider: 'esewa',
- *   returnUrl: 'https://example.com/thank-you',
- * });
- *
- * // Redirect customer to the hosted checkout page
- * console.log(session.checkout_url);
- * ```
+ * @deprecated Use functional exports instead for better tree-shaking.
  */
 export class CheckoutResource {
-    constructor(private readonly http: HttpClient) { }
+  constructor(public readonly http: HttpClient) {}
 
-    /**
-     * Create a new checkout session.
-     *
-     * Initiates a payment with the specified provider and returns a
-     * hosted checkout URL that you can redirect your customer to.
-     *
-     * @param params - Checkout session parameters.
-     * @returns The created checkout session with a `checkout_url`.
-     * @throws  {PayArkError} if the request fails validation or auth.
-     */
-    async create(params: CreateCheckoutParams): Promise<CheckoutSession> {
-        return this.http.request<CheckoutSession>('POST', '/v1/checkout', {
-            body: {
-                amount: params.amount,
-                currency: params.currency ?? 'NPR',
-                provider: params.provider,
-                returnUrl: params.returnUrl,
-                cancelUrl: params.cancelUrl,
-                metadata: params.metadata,
-            },
-        });
-    }
+  async create(params: CreateCheckoutParams): Promise<CheckoutSession> {
+    return createCheckout(this, params);
+  }
 }
