@@ -15,15 +15,13 @@
 
 import { PayArkError } from "./errors";
 import type { PayArkConfig, PayArkErrorBody } from "./types";
-import { Effect, Schedule } from "effect";
+import { Effect, Option } from "effect";
 import {
   HttpClient as Http,
   HttpClientRequest as HttpRequest,
-  HttpClientResponse as HttpResponse,
   FetchHttpClient,
   Headers,
 } from "@effect/platform";
-import { Cause, Exit, Duration, Option } from "effect";
 
 /** SDK version – injected at build time for User-Agent header. */
 const SDK_VERSION = "0.1.0";
@@ -111,139 +109,60 @@ export class HttpClient {
 
     const headers = this.buildHeaders(opts.headers, idempotencyKey);
 
-    // eslint-disable-next-line @typescript-eslint/no-this-alias
-    const self = this;
-    const program = Effect.gen(function* () {
-      // Build request
-      let req = HttpRequest.make(method)(url).pipe(
-        HttpRequest.setHeaders(headers),
-      );
+    let retries = 0;
 
-      if (opts.body !== undefined && method !== "GET") {
-        req = yield* HttpRequest.bodyJson(opts.body)(req);
-      }
+    while (true) {
+      const req = await this.buildRequest(method, url, headers, opts.body);
 
-      // Execute request with retries and timeout
-      const response = yield* Http.execute(req).pipe(
-        Effect.flatMap(HttpResponse.filterStatusOk),
-        Effect.timeout(timeout),
-        Effect.catchAll((err) => {
-          if (
-            err &&
-            typeof err === "object" &&
-            "_tag" in err &&
-            err._tag === "ResponseError"
-          ) {
-            const responseError = err as any;
-            const retryAfterOption = Headers.get(
-              responseError.response.headers,
-              "retry-after",
-            );
-            if (Option.isSome(retryAfterOption)) {
-              const retryAfter = retryAfterOption.value;
-              const seconds = parseInt(retryAfter, 10);
-              if (!isNaN(seconds) && seconds > 0) {
-                return Effect.sleep(Duration.seconds(seconds)).pipe(
-                  Effect.flatMap(() => Effect.fail(err)),
-                );
-              }
-            }
-          }
-          return Effect.fail(err);
-        }),
-        // Retry logic: Exponential backoff with jitter + respect Retry-After
-        Effect.retry(
-          Schedule.exponential("500 millis").pipe(
-            Schedule.jittered,
-            // Only retry on 429 and 5xx
-            Schedule.whileInput((err) => {
-              if (
-                err &&
-                typeof err === "object" &&
-                "_tag" in err &&
-                err._tag === "ResponseError"
-              ) {
-                const responseError = err as any;
-                return RETRYABLE_STATUS_CODES.has(
-                  responseError.response.status,
-                );
-              }
-              return true; // Network errors are retryable
-            }),
-            Schedule.intersect(Schedule.recurs(self.maxRetries)),
+      let response;
+      try {
+        response = await Effect.runPromise(
+          Http.execute(req).pipe(
+            Effect.timeout(timeout),
+            Effect.provide(FetchHttpClient.layer),
           ),
-        ),
-        // Map any remaining errors to PayArkError
-        Effect.catchAll((err: any) =>
-          Effect.gen(function* () {
-            if (
-              err &&
-              typeof err === "object" &&
-              "_tag" in err &&
-              err._tag === "ResponseError"
-            ) {
-              const responseError = err as any;
-              const errorBody = yield* responseError.response.json.pipe(
-                Effect.catchAll(() => Effect.succeed(undefined)),
-              );
-              return yield* Effect.fail(
-                PayArkError.generate(
-                  responseError.response.status,
-                  errorBody,
-                  errorBody?.error,
-                ),
-              );
-            }
+        );
+      } catch (err: unknown) {
+        if (retries < this.maxRetries) {
+          retries += 1;
+          const delayMs = this.computeBackoffMs(retries);
+          await this.sleep(delayMs);
+          continue;
+        }
 
-            if (
-              err &&
-              typeof err === "object" &&
-              "_tag" in err &&
-              err._tag === "TimeoutException"
-            ) {
-              return yield* Effect.fail(
-                PayArkError.generate(
-                  0,
-                  undefined,
-                  `Request timed out after ${timeout}ms`,
-                ),
-              );
-            }
-
-            return yield* Effect.fail(
-              PayArkError.generate(
-                0,
-                undefined,
-                `Network error: ${String(err)}`,
-              ),
-            );
-          }),
-        ),
-      );
-
-      // Parse success response
-      if (response.status === 204) {
-        return {} as T;
+        throw this.mapNetworkError(err, timeout);
       }
-      const data = yield* response.json as Effect.Effect<T, any, never>;
-      return data;
-    }).pipe(Effect.provide(FetchHttpClient.layer)) as Effect.Effect<
-      T,
-      PayArkError,
-      never
-    >;
 
-    const result = await Effect.runPromiseExit(program);
-    if (Exit.isSuccess(result)) {
-      return result.value;
-    }
+      if (response.status >= 200 && response.status < 300) {
+        if (response.status === 204) {
+          return {} as T;
+        }
 
-    // Unwrap the error from the Cause
-    const failures = Array.from(Cause.failures(result.cause));
-    if (failures.length > 0) {
-      throw failures[0];
+        return (await this.parseJsonSafe<T>(response)) as T;
+      }
+
+      const retryAfterSeconds = this.getRetryAfterSeconds(response);
+      const isRetryable = RETRYABLE_STATUS_CODES.has(response.status);
+
+      if (isRetryable && retries < this.maxRetries) {
+        retries += 1;
+
+        if (response.status === 429 && retryAfterSeconds !== null) {
+          await this.sleep(retryAfterSeconds * 1000);
+        } else {
+          const delayMs = this.computeBackoffMs(retries);
+          await this.sleep(delayMs);
+        }
+        continue;
+      }
+
+      const errorBody = await this.parseJsonSafe<PayArkErrorBody>(response);
+      throw PayArkError.generate(
+        response.status,
+        errorBody,
+        errorBody?.error,
+      );
     }
-    throw Cause.squash(result.cause);
   }
 
   // ── Private helpers ──────────────────────────────────────────────────────
@@ -309,5 +228,81 @@ export class HttpClient {
   /** Promise-based sleep utility. */
   private sleep(ms: number): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /** Build a request (including optional JSON body). */
+  private async buildRequest(
+    method: HttpMethod,
+    url: string,
+    headers: Record<string, string>,
+    body: unknown,
+  ) {
+    let req = HttpRequest.make(method)(url).pipe(
+      HttpRequest.setHeaders(headers),
+    );
+
+    if (body !== undefined && method !== "GET") {
+      req = await Effect.runPromise(HttpRequest.bodyJson(body)(req));
+    }
+
+    return req;
+  }
+
+  /** Compute exponential backoff with jitter (0.5x–1.5x). */
+  private computeBackoffMs(retryCount: number): number {
+    const baseMs = 500 * 2 ** (retryCount - 1);
+    const jitter = 0.5 + Math.random();
+    return Math.round(baseMs * jitter);
+  }
+
+  /** Parse Retry-After header into seconds (supports delta or HTTP-date). */
+  private getRetryAfterSeconds(response: any): number | null {
+    const retryAfterOption = Headers.get(response.headers, "retry-after");
+    if (!Option.isSome(retryAfterOption)) return null;
+
+    const value = retryAfterOption.value.trim();
+    const seconds = Number.parseInt(value, 10);
+    if (Number.isFinite(seconds)) {
+      return Math.max(0, seconds);
+    }
+
+    const dateMs = Date.parse(value);
+    if (!Number.isNaN(dateMs)) {
+      const deltaMs = dateMs - Date.now();
+      return deltaMs > 0 ? Math.ceil(deltaMs / 1000) : 0;
+    }
+
+    return null;
+  }
+
+  /** Parse JSON body safely (returns undefined on failure). */
+  private async parseJsonSafe<T>(response: any): Promise<T | undefined> {
+    try {
+      return (await Effect.runPromise(response.json)) as T;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /** Map network/timeout errors to PayArkError. */
+  private mapNetworkError(err: unknown, timeout: number): PayArkError {
+    if (
+      err &&
+      typeof err === "object" &&
+      "_tag" in err &&
+      (err as { _tag?: string })._tag === "TimeoutException"
+    ) {
+      return PayArkError.generate(
+        0,
+        undefined,
+        `Request timed out after ${timeout}ms`,
+      );
+    }
+
+    return PayArkError.generate(
+      0,
+      undefined,
+      `Network error: ${String(err)}`,
+    );
   }
 }

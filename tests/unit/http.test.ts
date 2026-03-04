@@ -725,6 +725,7 @@ describe("HttpClient", () => {
       expect(timestamps.length).toBe(2);
       const delay = timestamps[1] - timestamps[0];
       expect(delay).toBeGreaterThanOrEqual(1000);
+      expect(delay).toBeLessThan(1500);
     });
 
     test("should retry on 500 server error up to maxRetries", async () => {
