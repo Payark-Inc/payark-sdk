@@ -44,7 +44,7 @@ console.log(session.checkout_url);
 const payark = new PayArk({
   apiKey: "sk_test_...", // Required – your project secret key
   sandbox: true, // Optional – enable Sandbox Mode (default: false)
-  baseUrl: "http://localhost:3001", // Optional – for local dev
+  baseUrl: "https://payark-api.codimo-dev.workers.dev", // Optional – for local dev
   timeout: 10_000, // Optional – request timeout in ms (default: 30s)
   maxRetries: 2, // Optional – retries on 5xx errors (default: 2)
 });
