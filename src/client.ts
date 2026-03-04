@@ -2,6 +2,12 @@
 // PayArk SDK – Main Client
 // ---------------------------------------------------------------------------
 // The primary entry point for SDK consumers.
+//
+// Design rationale:
+//   - Mirrors the Stripe SDK pattern: `payark.checkout.create(…)`
+//   - Resources are lazy properties to avoid unnecessary allocations
+//   - Zero runtime dependencies – uses global `fetch()` (Node 18+, Bun, Deno)
+//   - Fully tree-shakeable when bundled
 // ---------------------------------------------------------------------------
 
 import { HttpClient } from "./http";
@@ -9,9 +15,7 @@ import { CheckoutResource } from "./resources/checkout";
 import { PaymentsResource } from "./resources/payments";
 import { WebhooksResource } from "./resources/webhooks";
 import { Projects } from "./resources/projects";
-import { CustomersResource, type PayArkClient } from "./resources/customers";
-import { SubscriptionsResource } from "./resources/subscriptions";
-import type { PayArkConfig } from "./schemas";
+import type { PayArkConfig } from "./types";
 
 /**
  * The PayArk SDK client.
@@ -31,15 +35,36 @@ import type { PayArkConfig } from "./schemas";
  *   provider: 'esewa',
  *   returnUrl: 'https://example.com/thank-you',
  * });
+ *
+ * console.log(session.checkout_url);
+ * ```
+ *
+ * @example
+ * ```ts
+ * // List payments with pagination
+ * const { data, meta } = await payark.payments.list({ limit: 25 });
+ * console.log(`Found ${meta.total} payments`);
  * ```
  */
-export class PayArk implements PayArkClient {
+export class PayArk {
   /** Internal HTTP transport – shared across all resources. */
-  readonly http: HttpClient;
-  readonly config: PayArkConfig;
+  private readonly http: HttpClient;
+  private readonly config: PayArkConfig;
 
   /**
    * Static webhook verification utility.
+   *
+   * Does NOT require an SDK instance — used to verify incoming webhook
+   * signatures in your server's request handler.
+   *
+   * @example
+   * ```ts
+   * const isValid = await PayArk.webhooks.verify(
+   *   rawBody,
+   *   req.headers['x-payark-signature'],
+   *   process.env.PAYARK_WEBHOOK_SECRET!,
+   * );
+   * ```
    */
   static readonly webhooks = new WebhooksResource();
 
@@ -47,11 +72,25 @@ export class PayArk implements PayArkClient {
   private _checkout?: CheckoutResource;
   private _payments?: PaymentsResource;
   private _projects?: Projects;
-  private _customers?: CustomersResource;
-  private _subscriptions?: SubscriptionsResource;
 
   /**
    * Create a new PayArk client.
+   *
+   * @param config - Configuration object. Only `apiKey` is required.
+   *
+   * @example
+   * ```ts
+   * // Minimal
+   * const payark = new PayArk({ apiKey: 'sk_live_...' });
+   *
+   * // With overrides (local dev)
+   * const payark = new PayArk({
+   *   apiKey: 'sk_test_...',
+   *   baseUrl: 'http://localhost:3001',
+   *   timeout: 10_000,
+   *   maxRetries: 0,
+   * });
+   * ```
    */
   constructor(config: PayArkConfig) {
     this.config = config;
@@ -60,6 +99,12 @@ export class PayArk implements PayArkClient {
 
   // ── Resource accessors ───────────────────────────────────────────────────
 
+  /**
+   * Checkout sessions resource.
+   *
+   * Use this to create hosted checkout sessions that redirect your
+   * customers to a PayArk-managed payment page.
+   */
   get checkout(): CheckoutResource {
     if (!this._checkout) {
       this._checkout = new CheckoutResource(this.http);
@@ -67,6 +112,11 @@ export class PayArk implements PayArkClient {
     return this._checkout;
   }
 
+  /**
+   * Payments resource.
+   *
+   * Use this to list and retrieve payment records for your project.
+   */
   get payments(): PaymentsResource {
     if (!this._payments) {
       this._payments = new PaymentsResource(this.http);
@@ -74,20 +124,11 @@ export class PayArk implements PayArkClient {
     return this._payments;
   }
 
-  get customers(): CustomersResource {
-    if (!this._customers) {
-      this._customers = new CustomersResource(this.http);
-    }
-    return this._customers;
-  }
-
-  get subscriptions(): SubscriptionsResource {
-    if (!this._subscriptions) {
-      this._subscriptions = new SubscriptionsResource(this.http);
-    }
-    return this._subscriptions;
-  }
-
+  /**
+   * Projects resource.
+   *
+   * Requires a Personal Access Token (PAT).
+   */
   get projects(): Projects {
     if (!this._projects) {
       this._projects = new Projects(this.http);

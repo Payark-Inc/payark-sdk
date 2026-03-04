@@ -1,6 +1,6 @@
 {
     "name": "@payark/sdk",
-    "version": "0.1.2",
+    "version": "0.1.1",
     "description": "Official TypeScript SDK for the PayArk payment gateway API.",
     "main": "dist/index.js",
     "module": "dist/index.mjs",
@@ -10,11 +10,6 @@
             "types": "./dist/index.d.ts",
             "import": "./dist/index.mjs",
             "require": "./dist/index.js"
-        },
-        "./schemas": {
-            "types": "./src/schemas.ts",
-            "import": "./src/schemas.ts",
-            "default": "./src/schemas.ts"
         }
     },
     "files": [
@@ -40,15 +35,9 @@
     "author": "PayArk",
     "license": "MIT",
     "devDependencies": {
-        "@types/node": "^20.0.0",
-        "fast-check": "^4.5.3",
         "tsup": "^8.0.0",
-        "typescript": "^5.7.0"
+        "typescript": "^5.7.0",
+        "@types/node": "^20.0.0"
     },
-    "dependencies": {
-        "@payark/sdk-effect": "workspace:*",
-        "@effect/platform": "^0.94.5",
-        "@effect/schema": "^0.75.5",
-        "effect": "^3.19.19"
-    }
+    "dependencies": {}
 }
