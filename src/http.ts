@@ -167,9 +167,9 @@ export class HttpClient {
         req = yield* HttpRequest.bodyJson(opts.body)(req);
       }
 
-      const executeWithRetry = (
+      const executeWithRetry: (attempt: number) => Effect.Effect<any, any, any> = (
         attempt: number,
-      ): Effect.Effect<any, any, HttpClient.HttpClient> =>
+      ) =>
         Http.execute(req).pipe(
           Effect.flatMap(HttpResponse.filterStatusOk),
           Effect.timeout(timeout),
