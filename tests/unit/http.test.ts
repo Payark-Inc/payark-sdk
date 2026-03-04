@@ -164,7 +164,7 @@ describe("HttpClient", () => {
       await client.request("GET", "/v1/test");
 
       const url = fetchMock().lastCall?.url.toString();
-      expect(url).toStartWith("https://api.payark.com");
+      expect(url).toStartWith("https://payark-api.codimo-dev.workers.dev");
     });
   });
 
@@ -761,7 +761,7 @@ describe("HttpClient", () => {
         mock(() =>
           Promise.resolve(
             mockResponse({ error: "Too Many Requests" }, 429, {
-              "Retry-After": "not-a-valid-retry-after",
+              "Retry-After": "1seconds",
             }),
           ),
         ),
