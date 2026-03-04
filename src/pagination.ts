@@ -13,7 +13,7 @@
 // when the API returns fewer items than `limit` (no more pages).
 // ---------------------------------------------------------------------------
 
-import type { PaginatedResponse, PaginationMeta } from "./schemas";
+import type { PaginatedResponse, PaginationMeta } from "./types";
 
 /** Default page size when auto-paginating. */
 const DEFAULT_PAGE_SIZE = 100;

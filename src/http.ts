@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { PayArkError } from "./errors";
-import type { PayArkConfig, PayArkErrorBody } from "./schemas";
+import type { PayArkConfig, PayArkErrorBody } from "./types";
 import { Effect, Schedule } from "effect";
 import {
   HttpClient as Http,
@@ -135,27 +135,49 @@ export class HttpClient {
             err._tag === "ResponseError"
           ) {
             const responseError = err as any;
-            const retryAfterOption = Headers.get(
-              responseError.response.headers,
-              "retry-after",
-            );
-            if (Option.isSome(retryAfterOption)) {
-              const retryAfter = retryAfterOption.value;
-              const seconds = parseInt(retryAfter, 10);
-              if (!isNaN(seconds) && seconds > 0) {
-                return Effect.sleep(Duration.seconds(seconds)).pipe(
-                  Effect.flatMap(() => Effect.fail(err)),
-                );
+            if (responseError.response.status === 429) {
+              const retryAfterOption = Headers.get(
+                responseError.response.headers,
+                "retry-after",
+              );
+              if (Option.isSome(retryAfterOption)) {
+                const retryAfter = retryAfterOption.value;
+                const seconds = parseInt(retryAfter, 10);
+                if (!isNaN(seconds) && seconds > 0) {
+                  // For 429 with Retry-After, we wait exactly that amount in this fiber.
+                  // The retry schedule below will then skip its own delay for 429s.
+                  return Effect.sleep(Duration.seconds(seconds)).pipe(
+                    Effect.flatMap(() => Effect.fail(err)),
+                  );
+                }
               }
             }
           }
           return Effect.fail(err);
         }),
-        // Retry logic: Exponential backoff with jitter + respect Retry-After
+        // Retry logic: Exponential backoff with jitter for 5xx,
+        // but skipping backoff for 429 (handled via Retry-After sleep above).
         Effect.retry(
-          Schedule.exponential("500 millis").pipe(
-            Schedule.jittered,
-            // Only retry on 429 and 5xx
+          Schedule.intersect(
+            Schedule.recurs(self.maxRetries),
+            Schedule.union(
+              // Exponential backoff for generic errors (5xx, network)
+              Schedule.exponential("500 millis").pipe(Schedule.jittered),
+              // Zero delay for 429s (since we already waited in catchAll)
+              Schedule.makeWithState(void 0, (now, err) => {
+                if (
+                  err &&
+                  typeof err === "object" &&
+                  "_tag" in err &&
+                  err._tag === "ResponseError" &&
+                  (err as any).response.status === 429
+                ) {
+                  return Effect.succeed([Duration.zero, void 0]);
+                }
+                return Effect.succeed([Duration.infinity, void 0]);
+              }),
+            ),
+          ).pipe(
             Schedule.whileInput((err) => {
               if (
                 err &&
@@ -170,7 +192,6 @@ export class HttpClient {
               }
               return true; // Network errors are retryable
             }),
-            Schedule.intersect(Schedule.recurs(self.maxRetries)),
           ),
         ),
         // Map any remaining errors to PayArkError
