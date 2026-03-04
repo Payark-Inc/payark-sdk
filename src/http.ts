@@ -15,7 +15,7 @@
 
 import { PayArkError } from "./errors";
 import type { PayArkConfig, PayArkErrorBody } from "./types";
-import { Effect, Schedule } from "effect";
+import { Effect } from "effect";
 import {
   HttpClient as Http,
   HttpClientRequest as HttpRequest,
@@ -110,9 +110,9 @@ export class HttpClient {
       : undefined;
 
     const headers = this.buildHeaders(opts.headers, idempotencyKey);
-
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     const self = this;
+
     const program = Effect.gen(function* () {
       const parseRetryAfterMs = (retryAfter: string): number | undefined => {
         const seconds = Number.parseInt(retryAfter, 10);
@@ -129,6 +129,35 @@ export class HttpClient {
         return undefined;
       };
 
+      const isResponseError = (err: unknown): boolean =>
+        !!(
+          err &&
+          typeof err === "object" &&
+          "_tag" in err &&
+          err._tag === "ResponseError"
+        );
+
+      const getStatusCode = (err: unknown): number | undefined => {
+        if (!isResponseError(err)) return undefined;
+        const responseError = err as any;
+        return responseError.response.status;
+      };
+
+      const getRetryAfterMsFromError = (err: unknown): number | undefined => {
+        if (!isResponseError(err)) return undefined;
+        const responseError = err as any;
+        if (responseError.response.status !== 429) return undefined;
+        const retryAfter = Headers.get(responseError.response.headers, "retry-after");
+        if (Option.isNone(retryAfter)) return undefined;
+        return parseRetryAfterMs(retryAfter.value);
+      };
+
+      const computeBackoffMs = (retryIndex: number): number => {
+        const base = 500 * 2 ** retryIndex;
+        const jitter = Math.floor(Math.random() * base); // Full jitter in [0, base)
+        return jitter;
+      };
+
       // Build request
       let req = HttpRequest.make(method)(url).pipe(
         HttpRequest.setHeaders(headers),
@@ -138,67 +167,44 @@ export class HttpClient {
         req = yield* HttpRequest.bodyJson(opts.body)(req);
       }
 
-      // Execute request with retries and timeout
-      const response = yield* Http.execute(req).pipe(
-        Effect.flatMap(HttpResponse.filterStatusOk),
-        Effect.timeout(timeout),
-        Effect.catchAll((err) => {
-          if (
-            err &&
-            typeof err === "object" &&
-            "_tag" in err &&
-            err._tag === "ResponseError"
-          ) {
-            const responseError = err as any;
-            const retryAfterOption = Headers.get(
-              responseError.response.headers,
-              "retry-after",
-            );
-            if (
-              responseError.response.status === 429 &&
-              Option.isSome(retryAfterOption)
-            ) {
-              const retryAfter = retryAfterOption.value;
-              const retryAfterMs = parseRetryAfterMs(retryAfter);
+      const executeWithRetry: (attempt: number) => Effect.Effect<any, any, any> = (
+        attempt: number,
+      ) =>
+        Http.execute(req).pipe(
+          Effect.flatMap(HttpResponse.filterStatusOk),
+          Effect.timeout(timeout),
+          Effect.catchAll((err) =>
+            Effect.gen(function* () {
+              if (attempt >= self.maxRetries) {
+                return yield* Effect.fail(err);
+              }
+
+              const retryAfterMs = getRetryAfterMsFromError(err);
               if (retryAfterMs !== undefined) {
-                return Effect.sleep(Duration.millis(retryAfterMs)).pipe(
-                  Effect.flatMap(() => Effect.fail(err)),
-                );
+                // For 429, retry exactly at server-provided Retry-After.
+                yield* Effect.sleep(Duration.millis(retryAfterMs));
+                return yield* executeWithRetry(attempt + 1);
               }
-            }
-          }
-          return Effect.fail(err);
-        }),
-        // Retry logic: Exponential backoff with jitter + respect Retry-After
-        Effect.retry(
-          Schedule.exponential("500 millis").pipe(
-            Schedule.jittered,
-            // Retry server failures and rate limits that provide Retry-After.
-            Schedule.whileInput((err) => {
-              if (
-                err &&
-                typeof err === "object" &&
-                "_tag" in err &&
-                err._tag === "ResponseError"
-              ) {
-                const responseError = err as any;
-                if (responseError.response.status === 429) {
-                  const retryAfter = Headers.get(
-                    responseError.response.headers,
-                    "retry-after",
-                  );
-                  if (Option.isNone(retryAfter)) return false;
-                  return parseRetryAfterMs(retryAfter.value) !== undefined;
-                }
-                return RETRYABLE_STATUS_CODES.has(
-                  responseError.response.status,
-                );
+
+              const statusCode = getStatusCode(err);
+              const shouldRetryServerError =
+                statusCode !== undefined &&
+                RETRYABLE_STATUS_CODES.has(statusCode);
+              const shouldRetryNetworkError = statusCode === undefined;
+
+              if (shouldRetryServerError || shouldRetryNetworkError) {
+                const backoffMs = computeBackoffMs(attempt);
+                yield* Effect.sleep(Duration.millis(backoffMs));
+                return yield* executeWithRetry(attempt + 1);
               }
-              return true; // Network errors are retryable
+
+              return yield* Effect.fail(err);
             }),
-            Schedule.intersect(Schedule.recurs(self.maxRetries)),
           ),
-        ),
+        );
+
+      // Execute request with retries and timeout
+      const response = yield* executeWithRetry(0).pipe(
         // Map any remaining errors to PayArkError
         Effect.catchAll((err: any) =>
           Effect.gen(function* () {
