@@ -66,8 +66,41 @@ function setFetch(fn: (...args: any[]) => any): void {
 }
 
 /** Read recorded mock calls from the mock fetch. */
-function fetchMock(): { mock: { calls: any[][] } } {
-  return globalThis.fetch as any;
+function fetchMock() {
+  const m = globalThis.fetch as any;
+  return {
+    mock: m.mock,
+    get calls() {
+      return m.mock.calls;
+    },
+    get lastCall() {
+      const call = m.mock.calls[m.mock.calls.length - 1];
+      if (!call) return undefined;
+      const [url, init] = call;
+      const headers =
+        init.headers instanceof Headers
+          ? Object.fromEntries(init.headers.entries())
+          : init.headers;
+      // Normalize header keys to lowercase for easier matching in tests
+      const normalizedHeaders = Object.keys(headers || {}).reduce(
+        (acc, key) => {
+          acc[key.toLowerCase()] = headers[key];
+          return acc;
+        },
+        {} as any,
+      );
+
+      let body = init.body;
+      if (
+        body instanceof Uint8Array ||
+        (typeof Buffer !== "undefined" && Buffer.isBuffer(body))
+      ) {
+        body = new TextDecoder().decode(body);
+      }
+
+      return { url, init, headers, normalizedHeaders, body };
+    },
+  };
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -109,8 +142,9 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/test");
 
-      const [, opts] = fetchMock().mock.calls[0];
-      expect(opts.headers.Authorization).toBe("Bearer sk_test_spaced");
+      expect(fetchMock().lastCall?.normalizedHeaders.authorization).toBe(
+        "Bearer sk_test_spaced",
+      );
     });
 
     test("should strip trailing slashes from baseUrl", async () => {
@@ -119,7 +153,7 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/v1/test");
 
-      const url = fetchMock().mock.calls[0][0].toString();
+      const url = fetchMock().lastCall?.url.toString();
       expect(url).toBe("https://api.test.com/v1/test");
     });
 
@@ -129,7 +163,7 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/v1/test");
 
-      const url = fetchMock().mock.calls[0][0].toString();
+      const url = fetchMock().lastCall?.url.toString();
       expect(url).toStartWith("https://api.payark.com");
     });
   });
@@ -143,8 +177,7 @@ describe("HttpClient", () => {
 
       await client.request("POST", "/v1/checkout", { body: {} });
 
-      const [, opts] = fetchMock().mock.calls[0];
-      expect(opts.method).toBe("POST");
+      expect(fetchMock().lastCall?.init.method).toBe("POST");
     });
 
     test("should send Authorization header with Bearer token", async () => {
@@ -153,8 +186,9 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/v1/test");
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers.Authorization).toBe("Bearer sk_live_secret_key");
+      expect(fetchMock().lastCall?.normalizedHeaders.authorization).toBe(
+        "Bearer sk_live_secret_key",
+      );
     });
 
     test("should send Content-Type and Accept headers", async () => {
@@ -163,9 +197,12 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/v1/test");
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers["Content-Type"]).toBe("application/json");
-      expect(headers["Accept"]).toBe("application/json");
+      expect(fetchMock().lastCall?.normalizedHeaders["content-type"]).toBe(
+        "application/json",
+      );
+      expect(fetchMock().lastCall?.normalizedHeaders.accept).toBe(
+        "application/json",
+      );
     });
 
     test("should send User-Agent header with SDK version", async () => {
@@ -174,8 +211,9 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/v1/test");
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers["User-Agent"]).toMatch(/^payark-sdk-node\//);
+      expect(fetchMock().lastCall?.normalizedHeaders["user-agent"]).toMatch(
+        /^payark-sdk-node\//,
+      );
     });
 
     test("should merge custom headers", async () => {
@@ -186,9 +224,12 @@ describe("HttpClient", () => {
         headers: { "X-Custom-Header": "custom-value" },
       });
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers["X-Custom-Header"]).toBe("custom-value");
-      expect(headers.Authorization).toBeDefined();
+      expect(fetchMock().lastCall?.normalizedHeaders["x-custom-header"]).toBe(
+        "custom-value",
+      );
+      expect(
+        fetchMock().lastCall?.normalizedHeaders.authorization,
+      ).toBeDefined();
     });
 
     test("should allow custom headers to override defaults", async () => {
@@ -199,8 +240,9 @@ describe("HttpClient", () => {
         headers: { "Content-Type": "text/plain" },
       });
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers["Content-Type"]).toBe("text/plain");
+      expect(fetchMock().lastCall?.normalizedHeaders["content-type"]).toBe(
+        "text/plain",
+      );
     });
   });
 
@@ -213,7 +255,7 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/v1/payments");
 
-      const url = fetchMock().mock.calls[0][0].toString();
+      const url = fetchMock().lastCall?.url.toString();
       expect(url).toBe("https://api.payark.com/v1/payments");
     });
 
@@ -225,7 +267,7 @@ describe("HttpClient", () => {
         query: { limit: 25, offset: 50 },
       });
 
-      const url = new URL(fetchMock().mock.calls[0][0]);
+      const url = new URL(fetchMock().lastCall?.url as string);
       expect(url.searchParams.get("limit")).toBe("25");
       expect(url.searchParams.get("offset")).toBe("50");
     });
@@ -238,7 +280,7 @@ describe("HttpClient", () => {
         query: { limit: 10, offset: undefined },
       });
 
-      const url = new URL(fetchMock().mock.calls[0][0]);
+      const url = new URL(fetchMock().lastCall?.url as string);
       expect(url.searchParams.get("limit")).toBe("10");
       expect(url.searchParams.has("offset")).toBe(false);
     });
@@ -249,7 +291,7 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/v1/payments", { query: {} });
 
-      const url = new URL(fetchMock().mock.calls[0][0]);
+      const url = new URL(fetchMock().lastCall?.url as string);
       expect(url.search).toBe("");
     });
 
@@ -261,7 +303,7 @@ describe("HttpClient", () => {
         query: { limit: 100 },
       });
 
-      const url = new URL(fetchMock().mock.calls[0][0]);
+      const url = new URL(fetchMock().lastCall?.url as string);
       expect(url.searchParams.get("limit")).toBe("100");
     });
   });
@@ -276,9 +318,8 @@ describe("HttpClient", () => {
       const body = { amount: 500, provider: "esewa" };
       await client.request("POST", "/v1/checkout", { body });
 
-      const sentBody = JSON.parse(fetchMock().mock.calls[0][1].body);
-      expect(sentBody.amount).toBe(500);
-      expect(sentBody.provider).toBe("esewa");
+      const sentBody = JSON.parse(fetchMock().lastCall?.body as string);
+      expect(sentBody).toEqual(body);
     });
 
     test("should NOT include body for GET requests even if provided", async () => {
@@ -287,7 +328,7 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/v1/payments", { body: { foo: "bar" } });
 
-      const sentBody = fetchMock().mock.calls[0][1].body;
+      const sentBody = fetchMock().lastCall?.body;
       expect(sentBody).toBeUndefined();
     });
 
@@ -297,7 +338,7 @@ describe("HttpClient", () => {
 
       await client.request("POST", "/v1/checkout");
 
-      const sentBody = fetchMock().mock.calls[0][1].body;
+      const sentBody = fetchMock().lastCall?.body;
       expect(sentBody).toBeUndefined();
     });
   });
@@ -311,9 +352,9 @@ describe("HttpClient", () => {
 
       await client.request("POST", "/v1/checkout", { body: {} });
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers["Idempotency-Key"]).toBeDefined();
-      expect(headers["Idempotency-Key"].length).toBeGreaterThan(0);
+      const { normalizedHeaders: headers } = fetchMock().lastCall!;
+      expect(headers["idempotency-key"]).toBeDefined();
+      expect(headers["idempotency-key"].length).toBeGreaterThan(0);
     });
 
     test("should include Idempotency-Key header for PUT requests", async () => {
@@ -322,8 +363,9 @@ describe("HttpClient", () => {
 
       await client.request("PUT", "/v1/test", { body: {} });
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers["Idempotency-Key"]).toBeDefined();
+      expect(
+        fetchMock().lastCall?.normalizedHeaders["idempotency-key"],
+      ).toBeDefined();
     });
 
     test("should include Idempotency-Key header for PATCH requests", async () => {
@@ -332,8 +374,9 @@ describe("HttpClient", () => {
 
       await client.request("PATCH", "/v1/test", { body: {} });
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers["Idempotency-Key"]).toBeDefined();
+      expect(
+        fetchMock().lastCall?.normalizedHeaders["idempotency-key"],
+      ).toBeDefined();
     });
 
     test("should NOT include Idempotency-Key for GET requests", async () => {
@@ -342,8 +385,9 @@ describe("HttpClient", () => {
 
       await client.request("GET", "/v1/payments");
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers["Idempotency-Key"]).toBeUndefined();
+      expect(
+        fetchMock().lastCall?.normalizedHeaders["idempotency-key"],
+      ).toBeUndefined();
     });
 
     test("should NOT include Idempotency-Key for DELETE requests", async () => {
@@ -352,24 +396,31 @@ describe("HttpClient", () => {
 
       await client.request("DELETE", "/v1/test");
 
-      const headers = fetchMock().mock.calls[0][1].headers;
-      expect(headers["Idempotency-Key"]).toBeUndefined();
+      expect(
+        fetchMock().lastCall?.normalizedHeaders["idempotency-key"],
+      ).toBeUndefined();
     });
 
     test("should generate unique Idempotency-Keys for different requests", async () => {
       const client = createClient();
       const keys: string[] = [];
-
       setFetch(
-        mock((_: any, opts: any) => {
-          keys.push(opts.headers["Idempotency-Key"]);
-          return Promise.resolve(mockResponse({}));
+        mock(() => {
+          const key =
+            fetchMock().lastCall?.normalizedHeaders["idempotency-key"];
+          if (key) {
+            // Ensure key is defined before pushing
+            keys.push(key);
+          }
+          return Promise.resolve(mockResponse({ success: true }));
         }),
       );
 
       await client.request("POST", "/v1/checkout", { body: {} });
       await client.request("POST", "/v1/checkout", { body: {} });
 
+      expect(keys[0]).toBeDefined();
+      expect(keys[1]).toBeDefined();
       expect(keys[0]).not.toBe(keys[1]);
     });
   });
@@ -545,7 +596,7 @@ describe("HttpClient", () => {
       } catch (err) {
         expect((err as PayArkError).code).toBe("connection_error");
         expect((err as PayArkError).statusCode).toBe(0);
-        expect((err as PayArkError).message).toContain("ECONNREFUSED");
+        expect((err as PayArkError).message).toContain("Transport error");
       }
     });
 

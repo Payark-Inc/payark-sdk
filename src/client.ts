@@ -15,6 +15,8 @@ import { CheckoutResource } from "./resources/checkout";
 import { PaymentsResource } from "./resources/payments";
 import { WebhooksResource } from "./resources/webhooks";
 import { Projects } from "./resources/projects";
+import { CustomersResource } from "./resources/customers";
+import { SubscriptionsResource } from "./resources/subscriptions";
 import type { PayArkConfig } from "./types";
 
 /**
@@ -72,6 +74,8 @@ export class PayArk {
   private _checkout?: CheckoutResource;
   private _payments?: PaymentsResource;
   private _projects?: Projects;
+  private _customers?: CustomersResource;
+  private _subscriptions?: SubscriptionsResource;
 
   /**
    * Create a new PayArk client.
@@ -134,5 +138,25 @@ export class PayArk {
       this._projects = new Projects(this.http);
     }
     return this._projects;
+  }
+
+  /**
+   * Customers resource.
+   */
+  get customers(): CustomersResource {
+    if (!this._customers) {
+      this._customers = new CustomersResource(this.http);
+    }
+    return this._customers;
+  }
+
+  /**
+   * Subscriptions resource.
+   */
+  get subscriptions(): SubscriptionsResource {
+    if (!this._subscriptions) {
+      this._subscriptions = new SubscriptionsResource(this.http);
+    }
+    return this._subscriptions;
   }
 }
