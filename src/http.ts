@@ -143,7 +143,6 @@ export class HttpClient {
               const retryAfter = retryAfterOption.value;
               const seconds = parseInt(retryAfter, 10);
               if (!isNaN(seconds) && seconds > 0) {
-                // Respect Retry-After header by sleeping before retrying
                 return Effect.sleep(Duration.seconds(seconds)).pipe(
                   Effect.flatMap(() => Effect.fail(err)),
                 );
@@ -153,7 +152,6 @@ export class HttpClient {
           return Effect.fail(err);
         }),
         // Retry logic: Exponential backoff with jitter + respect Retry-After
-        // Only retry on 429 and 5xx
         Effect.retry(
           Schedule.exponential("500 millis").pipe(
             Schedule.jittered,
