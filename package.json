@@ -46,6 +46,7 @@
         "typescript": "^5.7.0"
     },
     "dependencies": {
+        "@payark/sdk-effect": "workspace:*",
         "@effect/platform": "^0.94.5",
         "@effect/schema": "^0.75.5",
         "effect": "^3.19.19"
