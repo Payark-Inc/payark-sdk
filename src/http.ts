@@ -72,7 +72,9 @@ export class HttpClient {
     }
 
     this.apiKey = config.apiKey.trim();
-    this.baseUrl = (config.baseUrl ?? "https://api.payark.com").replace(
+    this.baseUrl = (
+      config.baseUrl ?? "https://payark-api.codimo-dev.workers.dev/"
+    ).replace(
       /\/+$/,
       "",
     );
@@ -115,12 +117,13 @@ export class HttpClient {
 
     const program = Effect.gen(function* () {
       const parseRetryAfterMs = (retryAfter: string): number | undefined => {
-        const seconds = Number.parseInt(retryAfter, 10);
-        if (Number.isFinite(seconds) && seconds > 0) {
-          return seconds * 1000;
+        const trimmed = retryAfter.trim();
+        if (/^\d+$/.test(trimmed)) {
+          const seconds = Number.parseInt(trimmed, 10);
+          if (seconds > 0) return seconds * 1000;
         }
 
-        const retryAt = Date.parse(retryAfter);
+        const retryAt = Date.parse(trimmed);
         if (!Number.isNaN(retryAt)) {
           const delta = retryAt - Date.now();
           if (delta > 0) return delta;
