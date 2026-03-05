@@ -40,7 +40,7 @@
         "@types/node": "^20.0.0"
     },
     "dependencies": {
-        "@effect/platform": "0.94.2",
-        "effect": "3.19.15"
+        "@effect/platform": "^0.94.5",
+        "effect": "^3.19.19"
     }
 }
