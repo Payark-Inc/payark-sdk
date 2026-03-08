@@ -41,6 +41,7 @@
     },
     "dependencies": {
         "@effect/platform": "^0.94.5",
+        "@payark/sdk-effect": "^0.1.5",
         "effect": "^3.19.19"
     }
 }
