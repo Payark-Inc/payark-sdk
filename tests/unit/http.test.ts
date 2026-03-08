@@ -582,7 +582,7 @@ describe("HttpClient", () => {
       } catch (err) {
         expect(err).toBeInstanceOf(PayArkError);
         expect((err as PayArkError).code).toBe("api_error");
-        expect((err as PayArkError).message).toContain("500");
+        expect((err as PayArkError).message).toBe("Internal Server Error");
       }
     });
 
