@@ -8,6 +8,16 @@
 // ── Main client ────────────────────────────────────────────────────────────
 export { PayArk } from "./client";
 
+// ── Functional Resources ───────────────────────────────────────────────────
+export * from "./resources/checkout";
+export * from "./resources/payments";
+export * from "./resources/customers";
+export * from "./resources/subscriptions";
+export * from "./resources/automation";
+export * from "./resources/tokens";
+export * from "./resources/projects";
+export * from "./resources/webhooks";
+
 // ── Error classes ──────────────────────────────────────────────────────────
 export {
   PayArkError,
@@ -26,19 +36,33 @@ export type { PayArkErrorCode } from "./errors";
 export type {
   // Config
   PayArkConfig,
+  // Models
+  Customer,
+  Payment,
+  Subscription,
+  Project,
+  Token,
+  Metadata,
+  // Primitives
+  Provider,
+  PaymentStatus,
+  SubscriptionStatus,
+  SubscriptionInterval,
   // Checkout
   CreateCheckoutParams,
   CheckoutSession,
+  // Customers
+  CreateCustomerParams,
+  UpdateCustomerParams,
+  ListCustomersParams,
   // Payments
-  Payment,
-  PaymentStatus,
   ListPaymentsParams,
+  // Subscriptions
+  CreateSubscriptionParams,
+  ListSubscriptionsParams,
+  // Pagination
   PaginatedResponse,
   PaginationMeta,
-  // Project
-  Project,
-  // Provider
-  Provider,
   // Webhooks
   WebhookEvent,
   WebhookEventType,
