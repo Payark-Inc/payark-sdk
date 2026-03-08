@@ -1,6 +1,6 @@
 {
     "name": "@payark/sdk",
-    "version": "0.1.1",
+    "version": "0.1.6",
     "description": "Official TypeScript SDK for the PayArk payment gateway API.",
     "main": "dist/index.js",
     "module": "dist/index.mjs",
@@ -40,7 +40,8 @@
         "@types/node": "^20.0.0"
     },
     "dependencies": {
-        "@effect/platform": "0.94.2",
-        "effect": "3.19.15"
+        "@effect/platform": "^0.94.5",
+        "@payark/sdk-effect": "^0.1.5",
+        "effect": "^3.19.19"
     }
 }
