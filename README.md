@@ -1,6 +1,6 @@
 # @payark/sdk
 
-The official TypeScript SDK for the [PayArk](https://payark.com) payment gateway API.
+The official TypeScript SDK for the [PayArk](https://payark.dev) payment gateway API.
 
 > **Zero dependencies** · **Type-safe** · **Retry-safe (idempotent)** · **Node 18+ / Bun / Deno**
 
@@ -24,49 +24,44 @@ pnpm add @payark/sdk
 ```ts
 import { PayArk } from "@payark/sdk";
 
-const payark = new PayArk({ apiKey: "sk_live_..." });
+// Environment is automatically detected by the key prefix
+const payark = new PayArk({ apiKey: "sk_test_..." }); // Automatically uses Sandbox Mode
+// const payark = new PayArk({ apiKey: "sk_live_..." }); // Automatically uses Live Mode
 
 // Create a checkout session
 const session = await payark.checkout.create({
   amount: 500,
-  provider: "esewa",
+  provider: "esewa", // or "khalti", "hamropay"
   returnUrl: "https://your-site.com/thank-you",
 });
 
 // Redirect user to the hosted checkout page
 console.log(session.checkout_url);
-// → "https://payark.com/checkout/pay_abc123"
+// → "https://payark.dev/checkout/pay_abc123"
 ```
 
 ## Configuration
 
 ```ts
 const payark = new PayArk({
-  apiKey: "sk_test_...", // Required – your project secret key
-  sandbox: true, // Optional – enable Sandbox Mode (default: false)
-  baseUrl: "https://payark-api.codimo-dev.workers.dev", // Optional – for local dev
+  apiKey: "sk_test_...", // Required – your project secret key (sk_test_ or sk_live_)
+  baseUrl: "https://api.payark.dev", // Optional – for local dev
   timeout: 10_000, // Optional – request timeout in ms (default: 30s)
   maxRetries: 2, // Optional – retries on 5xx errors (default: 2)
+  sandbox: true, // Optional – explicit Sandbox Mode override (recommended: use sk_test_ instead)
 });
 ```
 
-## Sandbox Mode
+## Environments & Sandbox Mode
 
-PayArk provides a **Sandbox Mode** to test your integration without moving real money or needing real provider credentials (e.g. eSewa merchant keys).
+PayArk uses **Key-Driven Environment Switching**. You no longer need to manually toggle sandbox modes in your code—simply provide the appropriate key.
 
-When `sandbox: true` is enabled:
+- **Sandbox (Test Mode)**: Use an `sk_test_...` key. Payments are simulated, no real money is moved, and you can test without real provider credentials.
+- **Live (Production Mode)**: Use an `sk_live_...` key. Real money transactions via configured payment gateways.
 
-1. Requests include the `x-sandbox-mode: true` header.
-2. The API bypasses real provider validation.
-3. Payments are marked as `test: true` in the database.
-4. You can simulate various payment outcomes via the sandbox gateway.
+### The Virtual Gateway
 
-```ts
-const payark = new PayArk({
-  apiKey: "sk_test_something",
-  sandbox: true,
-});
-```
+When using an `sk_test_` key, if you haven't added your own credentials (e.g., eSewa UAT keys) to the project, PayArk defaults to the **Sandbox Provider**. This allows you to test the full checkout flow immediately after registration.
 
 ## API Reference
 
@@ -74,14 +69,14 @@ const payark = new PayArk({
 
 Create a new payment checkout session.
 
-| Parameter   | Type                      | Required | Description                              |
-| ----------- | ------------------------- | -------- | ---------------------------------------- |
-| `amount`    | `number`                  | ✅       | Payment amount in the base currency unit |
-| `provider`  | `'esewa' \| 'khalti'`     | ✅       | Payment provider                         |
-| `returnUrl` | `string`                  | ✅       | URL to redirect after successful payment |
-| `currency`  | `string`                  | ❌       | ISO currency code (default: `"NPR"`)     |
-| `cancelUrl` | `string`                  | ❌       | URL to redirect on cancellation          |
-| `metadata`  | `Record<string, unknown>` | ❌       | Arbitrary metadata (e.g. `order_id`)     |
+| Parameter   | Type                                | Required | Description                              |
+| ----------- | ----------------------------------- | -------- | ---------------------------------------- |
+| `amount`    | `number`                            | ✅       | Payment amount in the base currency unit |
+| `provider`  | `'esewa' \| 'khalti' \| 'hamropay'` | ✅       | Payment provider                         |
+| `returnUrl` | `string`                            | ✅       | URL to redirect after successful payment |
+| `currency`  | `string`                            | ❌       | ISO currency code (default: `"NPR"`)     |
+| `cancelUrl` | `string`                            | ❌       | URL to redirect on cancellation          |
+| `metadata`  | `Record<string, unknown>`           | ❌       | Arbitrary metadata (e.g. `order_id`)     |
 
 **Returns:** `Promise<CheckoutSession>`
 
@@ -90,7 +85,7 @@ interface CheckoutSession {
   id: string;
   checkout_url: string;
   payment_method: {
-    type: "esewa" | "khalti";
+    type: "esewa" | "khalti" | "hamropay";
     url?: string;
     method?: "GET" | "POST";
     fields?: Record<string, string>;
