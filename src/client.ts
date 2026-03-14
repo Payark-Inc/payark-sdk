@@ -17,6 +17,8 @@ import { WebhooksResource } from "./resources/webhooks";
 import { Projects } from "./resources/projects";
 import { CustomersResource } from "./resources/customers";
 import { SubscriptionsResource } from "./resources/subscriptions";
+import { AutomationResource } from "./resources/automation";
+import { TokensResource } from "./resources/tokens";
 import type { PayArkConfig } from "./types";
 
 /**
@@ -76,6 +78,8 @@ export class PayArk {
   private _projects?: Projects;
   private _customers?: CustomersResource;
   private _subscriptions?: SubscriptionsResource;
+  private _automation?: AutomationResource;
+  private _tokens?: TokensResource;
 
   /**
    * Create a new PayArk client.
@@ -158,5 +162,29 @@ export class PayArk {
       this._subscriptions = new SubscriptionsResource(this.http);
     }
     return this._subscriptions;
+  }
+
+  /**
+   * Automation resource.
+   *
+   * Use this to trigger reminders and reapers.
+   */
+  get automation(): AutomationResource {
+    if (!this._automation) {
+      this._automation = new AutomationResource(this.http);
+    }
+    return this._automation;
+  }
+
+  /**
+   * Tokens resource.
+   *
+   * Use this to manage Personal Access Tokens (PAT).
+   */
+  get tokens(): TokensResource {
+    if (!this._tokens) {
+      this._tokens = new TokensResource(this.http);
+    }
+    return this._tokens;
   }
 }

@@ -164,7 +164,7 @@ describe("HttpClient", () => {
       await client.request("GET", "/v1/test");
 
       const url = fetchMock().lastCall?.url.toString();
-      expect(url).toStartWith("https://payark-api.codimo-dev.workers.dev");
+      expect(url).toStartWith("https://api.payark.dev");
     });
   });
 
@@ -250,13 +250,15 @@ describe("HttpClient", () => {
 
   describe("URL construction", () => {
     test("should construct correct URL from base + path", async () => {
-      const client = createClient({ baseUrl: "https://api.payark.com" });
+      const client = createClient({
+        baseUrl: "https://api.payark.dev",
+      });
       setFetch(mock(() => Promise.resolve(mockResponse({}))));
 
       await client.request("GET", "/v1/payments");
 
       const url = fetchMock().lastCall?.url.toString();
-      expect(url).toBe("https://api.payark.com/v1/payments");
+      expect(url).toBe("https://api.payark.dev/v1/payments");
     });
 
     test("should append query parameters to URL", async () => {
@@ -582,7 +584,7 @@ describe("HttpClient", () => {
       } catch (err) {
         expect(err).toBeInstanceOf(PayArkError);
         expect((err as PayArkError).code).toBe("api_error");
-        expect((err as PayArkError).message).toContain("500");
+        expect((err as PayArkError).message).toBe("Internal Server Error");
       }
     });
 

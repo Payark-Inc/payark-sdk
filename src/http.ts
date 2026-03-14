@@ -26,7 +26,7 @@ import {
 import { Cause, Exit, Duration, Option } from "effect";
 
 /** SDK version – injected at build time for User-Agent header. */
-const SDK_VERSION = "0.1.0";
+const SDK_VERSION = "0.1.9";
 
 /** Supported HTTP methods for the PayArk API. */
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
@@ -72,9 +72,10 @@ export class HttpClient {
     }
 
     this.apiKey = config.apiKey.trim();
-    this.baseUrl = (
-      config.baseUrl ?? "https://payark-api.codimo-dev.workers.dev/"
-    ).replace(/\/+$/, "");
+    this.baseUrl = (config.baseUrl ?? "https://api.payark.dev").replace(
+      /\/+$/,
+      "",
+    );
     this.timeout = config.timeout ?? 30_000;
     this.maxRetries = config.maxRetries ?? 2;
     this.sandbox = config.sandbox ?? false;
@@ -218,14 +219,24 @@ export class HttpClient {
               err._tag === "ResponseError"
             ) {
               const responseError = err as any;
+              // 1. Try to parse JSON problem body (RFC 7807) or standard JSON error
               const errorBody = yield* responseError.response.json.pipe(
-                Effect.catchAll(() => Effect.succeed(undefined)),
+                // 2. Fall back to raw text if it's not JSON (e.g., 502 Bad Gateway from Nginx)
+                Effect.catchAll(() =>
+                  responseError.response.text.pipe(
+                    Effect.map((text: string) => ({
+                      error: text.length > 0 ? text.slice(0, 512) : undefined,
+                    })),
+                    Effect.catchAll(() => Effect.succeed(undefined)),
+                  ),
+                ),
               );
+
               return yield* Effect.fail(
                 PayArkError.generate(
                   responseError.response.status,
                   errorBody,
-                  errorBody?.error,
+                  errorBody?.detail || errorBody?.error,
                 ),
               );
             }

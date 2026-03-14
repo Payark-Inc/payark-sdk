@@ -102,6 +102,32 @@ export async function deleteCustomer(
   );
 }
 
+/**
+ * High-level helper to either create a new customer or update an existing one
+ * based on the `merchant_customer_id`.
+ */
+export async function createOrUpdateCustomer(
+  client: PayArkClient,
+  params: CreateCustomerParams,
+): Promise<Customer> {
+  const existingList = await listCustomers(client, {
+    merchant_customer_id: params.merchant_customer_id,
+    limit: 1,
+  });
+
+  if (existingList.data.length > 0) {
+    const existing = existingList.data[0];
+    return updateCustomer(client, existing.id, {
+      email: params.email,
+      name: params.name,
+      phone: params.phone,
+      metadata: params.metadata,
+    });
+  }
+
+  return createCustomer(client, params);
+}
+
 // ── Legacy Resource Class ──────────────────────────────────────────────────
 
 /**
@@ -131,5 +157,9 @@ export class CustomersResource {
 
   async delete(id: string): Promise<void> {
     return deleteCustomer(this, id);
+  }
+
+  async createOrUpdate(params: CreateCustomerParams): Promise<Customer> {
+    return createOrUpdateCustomer(this, params);
   }
 }
